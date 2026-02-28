@@ -10,6 +10,8 @@ export const useBonuses = () =>
       const { data } = await api.get<Bonus[]>("/bonuses");
       return data;
     },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
 export const useExpenses = () =>
@@ -19,6 +21,8 @@ export const useExpenses = () =>
       const { data } = await api.get<Expense[]>("/expenses");
       return data;
     },
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
 export const useCreateTransaction = () => {

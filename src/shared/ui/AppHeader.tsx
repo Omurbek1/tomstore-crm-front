@@ -1,5 +1,11 @@
-import { Avatar, Layout, Space, Switch } from "antd";
-import { MoonOutlined, SunOutlined, UserOutlined } from "@ant-design/icons";
+import { Avatar, Button, Layout, Space, Switch } from "antd";
+import {
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  MoonOutlined,
+  SunOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import type { ReactNode } from "react";
 
 const { Header } = Layout;
@@ -7,6 +13,8 @@ const { Header } = Layout;
 type Props = {
   title: ReactNode;
   isDark: boolean;
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
   userName: string;
   onThemeChange: (isDark: boolean) => void;
   onOpenProfile: () => void;
@@ -15,6 +23,8 @@ type Props = {
 export const AppHeader = ({
   title,
   isDark,
+  sidebarCollapsed,
+  onToggleSidebar,
   userName,
   onThemeChange,
   onOpenProfile,
@@ -28,7 +38,15 @@ export const AppHeader = ({
         isDark ? "bg-gray-900" : "bg-white"
       } shadow`}
     >
-      <span className="text-lg font-bold">{title}</span>
+      <Space align="center" size={12}>
+        <Button
+          type="text"
+          onClick={onToggleSidebar}
+          icon={sidebarCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          aria-label={sidebarCollapsed ? "Показать меню" : "Скрыть меню"}
+        />
+        <span className="text-lg font-bold">{title}</span>
+      </Space>
       <Space>
         <Switch
           checkedChildren={<MoonOutlined />}

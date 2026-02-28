@@ -69,9 +69,13 @@ export interface BonusTarget extends BaseEntity {
   managerId?: string;
   amount: number;
   reward: number;
+  startDate?: string;
   deadline?: string;
   rewardType?: "money" | "material";
   rewardText?: string;
+  rewardIssued?: boolean;
+  rewardIssuedAt?: string | null;
+  rewardApprovedBy?: string | null;
 }
 
 export interface Expense extends BaseEntity {
@@ -94,7 +98,12 @@ export interface Sale extends BaseEntity {
   quantity: number;
   total: number;
   branch: string;
+  shiftId?: string;
   paymentType: "cash" | "installment" | "hybrid" | "booking" | "manual";
+  paymentLabel?: string;
+  hybridCash?: number;
+  hybridCard?: number;
+  hybridTransfer?: number;
   installmentMonths?: number;
   managerEarnings: number;
   deliveryStatus:
@@ -115,6 +124,44 @@ export interface Sale extends BaseEntity {
   deliveryCost?: number;
 }
 
+export interface CashShift extends BaseEntity {
+  cashierId: string;
+  cashierName: string;
+  branchName?: string;
+  status: "open" | "closed";
+  openedAt: string;
+  closedAt?: string | null;
+  openingCash: number;
+  closingCash?: number | null;
+  expectedCash?: number | null;
+  difference?: number | null;
+  debtBefore?: number | null;
+  shortageAmount?: number | null;
+  overageAmount?: number | null;
+  debtAfter?: number | null;
+  noteOpen?: string;
+  noteClose?: string;
+}
+
+export interface CashShiftReport {
+  shift: CashShift;
+  totals: {
+    totalOrders: number;
+    totalRevenue: number;
+    cashRevenue: number;
+    manualRevenue: number;
+    installmentRevenue: number;
+    hybridRevenue: number;
+    bookingRevenue: number;
+  };
+  expectedCash: number;
+  shortageAmount?: number;
+  overageAmount?: number;
+  debtBefore?: number;
+  debtAfter?: number;
+  sales: Sale[];
+}
+
 export interface AuthResponse {
   accessToken: string;
   user: Manager;
@@ -133,6 +180,7 @@ export interface ManagerPayoutBalance {
 export interface AppSettings extends BaseEntity {
   companyName: string;
   companyLogoUrl?: string;
+  manualPaymentTypes?: string[];
 }
 
 export type RepairStatus =
@@ -167,4 +215,169 @@ export interface PaginatedRepairs {
   limit: number;
   offset: number;
   hasMore: boolean;
+}
+
+export type TaskStatus = "todo" | "in_progress" | "done" | "canceled";
+export type TaskPriority = "low" | "medium" | "high" | "urgent";
+
+export interface Task extends BaseEntity {
+  title: string;
+  description?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  assigneeRole?: string;
+  createdById?: string;
+  createdByName?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  deadline?: string | null;
+  completedAt?: string | null;
+}
+
+export interface PaginatedTasks {
+  items: Task[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface MarketingKpi extends BaseEntity {
+  managerId: string;
+  managerName: string;
+  managerRole?: string;
+  branchName?: string;
+  month: string; // YYYY-MM
+  planMode: "week" | "month";
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  plannedPosts: number;
+  plannedReels: number;
+  publishedPosts: number;
+  publishedReels: number;
+  planItems?: Array<{
+    id: string;
+    date: string; // YYYY-MM-DD
+    type: "post" | "reels" | "story" | "other";
+    title?: string;
+    done: boolean;
+  }>;
+  reach: number;
+  engagements: number;
+  followersGrowth: number;
+  erPercent: number;
+  kpiScore: number;
+  salaryBase: number;
+  salaryBonus: number;
+  salaryTotal: number;
+  note?: string;
+}
+
+export interface PaginatedMarketingKpi {
+  items: MarketingKpi[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface AiAnalyzeRequest {
+  domain: "sales" | "marketing";
+  locale?: string;
+  metrics?: Record<string, unknown>;
+}
+
+export interface AiAnalyzeResult {
+  source: "llm";
+  summary: string;
+  risks: string[];
+  opportunities: string[];
+  recommendations: string[];
+}
+
+export interface AiTasksDraftRequest {
+  text: string;
+  locale?: string;
+  assignees?: Array<{ id: string; name: string; role?: string }>;
+}
+
+export interface AiTasksDraftItem {
+  title: string;
+  description?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  assigneeRole?: string;
+  priority: TaskPriority;
+  deadline?: string | null;
+}
+
+export interface AiTasksDraftResult {
+  source: "llm";
+  tasks: AiTasksDraftItem[];
+}
+
+export interface AiMarketingPlanDraftRequest {
+  text: string;
+  locale?: string;
+  month?: string;
+  assignees?: Array<{ id: string; name: string; role?: string }>;
+}
+
+export interface AiMarketingPlanDraftResult {
+  source: "llm";
+  draft: {
+    managerId?: string;
+    managerName?: string;
+    managerRole?: string;
+    month: string;
+    planMode: "week" | "month";
+    periodStart?: string | null;
+    periodEnd?: string | null;
+    plannedPosts: number;
+    plannedReels: number;
+    publishedPosts: number;
+    publishedReels: number;
+    reach: number;
+    engagements: number;
+    followersGrowth: number;
+    salaryBase: number;
+    note?: string;
+    planItems: Array<{
+      id: string;
+      date: string;
+      type: "post" | "reels" | "story" | "other";
+      title?: string;
+      done: boolean;
+    }>;
+  };
+}
+
+export interface AiMaterialsHelpRequest {
+  question: string;
+  locale?: string;
+  audience?: "manager" | "marketing" | "smm" | "general";
+  history?: Array<{
+    question?: string;
+    answer?: string;
+    createdAt?: string;
+  }>;
+  materials?: Array<{
+    id?: string;
+    title?: string;
+    description?: string;
+    type?: string;
+    url?: string;
+    folderName?: string;
+  }>;
+}
+
+export interface AiMaterialsHelpResult {
+  source: "llm";
+  answer: string;
+  recommendedMaterials: Array<{
+    id?: string;
+    title: string;
+    reason?: string;
+    url?: string;
+  }>;
 }

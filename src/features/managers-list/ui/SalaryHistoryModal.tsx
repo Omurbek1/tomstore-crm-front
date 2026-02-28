@@ -55,7 +55,7 @@ export const SalaryHistoryModal = ({ open, data, onCancel, formatDate }: Props) 
       bonusesTotal,
       advancesTotal,
       salaryBase,
-      payout: salaryBase + bonusesTotal - advancesTotal,
+      payout: salaryBase - bonusesTotal - advancesTotal,
     };
   }, [data, filteredItems]);
 
@@ -88,7 +88,7 @@ export const SalaryHistoryModal = ({ open, data, onCancel, formatDate }: Props) 
               />
             </Col>
             <Col span={8}>
-              <Statistic title="Бонусы" value={totals.bonusesTotal} suffix="c" />
+              <Statistic title="Выплачено ЗП/Бонус" value={totals.bonusesTotal} suffix="c" />
             </Col>
             <Col span={8}>
               <Statistic title="Авансы/Штрафы" value={totals.advancesTotal} suffix="c" />
@@ -116,8 +116,10 @@ export const SalaryHistoryModal = ({ open, data, onCancel, formatDate }: Props) 
                 title: "Сумма",
                 align: "right",
                 render: (_v, item) => (
-                  <div className={`font-bold ${item.type === "advance" ? "text-orange-500" : "text-green-600"}`}>
-                    {item.type === "advance" ? "-" : "+"}
+                  <div
+                    className={`font-bold ${item.type === "sale" ? "text-green-600" : "text-orange-500"}`}
+                  >
+                    {item.type === "sale" ? "+" : "-"}
                     {item.amount.toLocaleString()} c
                   </div>
                 ),

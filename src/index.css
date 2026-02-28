@@ -284,6 +284,39 @@ html.dark .app-root .finance-movement-row--expense > td {
   background: color-mix(in srgb, var(--surface-elev) 82%, transparent);
 }
 
+.app-root .cashier-fullmode {
+  background:
+    radial-gradient(1100px 360px at 5% -20%, rgba(60, 130, 246, 0.1), transparent 62%),
+    radial-gradient(900px 320px at 100% -25%, rgba(14, 165, 233, 0.08), transparent 64%),
+    var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-root .cashier-fullmode.cashier-fullmode--active {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+}
+
+.app-root .cashier-fullmode .cashier-fullmode__header {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border-bottom-color: var(--border);
+  backdrop-filter: blur(12px);
+}
+
+html.dark .app-root .cashier-fullmode {
+  background:
+    radial-gradient(1100px 360px at 5% -20%, rgba(30, 64, 175, 0.28), transparent 62%),
+    radial-gradient(900px 320px at 100% -25%, rgba(2, 132, 199, 0.24), transparent 64%),
+    #0f1727;
+}
+
+html.dark .app-root .cashier-fullmode .cashier-fullmode__header {
+  background: color-mix(in srgb, #13243b 80%, transparent);
+}
+
 html.dark .app-root .repair-row:hover > td {
   background: #213552 !important;
 }

@@ -1,5 +1,4 @@
 import axios from "axios";
-import { queryClient } from "./queryClient";
 
 const FALLBACK_API_URL = "http://localhost:3000";
 
@@ -28,17 +27,6 @@ export const api = axios.create({
   },
 });
 
-const MUTATING_METHODS = new Set(["post", "put", "patch", "delete"]);
-let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
-
-const scheduleInvalidateAll = () => {
-  if (invalidateTimer) return;
-  invalidateTimer = setTimeout(() => {
-    invalidateTimer = null;
-    queryClient.invalidateQueries();
-  }, 50);
-};
-
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
@@ -48,13 +36,7 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => {
-    const method = String(response?.config?.method || "").toLowerCase();
-    if (MUTATING_METHODS.has(method)) {
-      scheduleInvalidateAll();
-    }
-    return response;
-  },
+  (response) => response,
   (error) => {
     if (error?.response?.status === 401) {
       localStorage.removeItem("token");

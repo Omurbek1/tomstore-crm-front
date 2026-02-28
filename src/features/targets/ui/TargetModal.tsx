@@ -1,4 +1,5 @@
 import { Button, DatePicker, Form, Input, InputNumber, Modal, Radio, Select } from "antd";
+import type { Dayjs } from "dayjs";
 
 type Manager = {
   id: string;
@@ -12,7 +13,9 @@ type TargetFormValues = {
   rewardType: "money" | "material";
   reward?: number;
   rewardText?: string;
+  startDate?: Dayjs;
   deadline?: string;
+  period?: [Dayjs, Dayjs];
 };
 
 type Props = {
@@ -94,8 +97,12 @@ export const TargetModal = ({ open, managers, onCancel, onSubmit }: Props) => {
           }
         </Form.Item>
 
-        <Form.Item name="deadline" label="Дедлайн" rules={[{ required: true }]}>
-          <DatePicker style={{ width: "100%" }} />
+        <Form.Item
+          name="period"
+          label="Период плана (с / до)"
+          rules={[{ required: true, message: "Укажите период плана" }]}
+        >
+          <DatePicker.RangePicker style={{ width: "100%" }} />
         </Form.Item>
 
         <Button type="primary" htmlType="submit" block>

@@ -13,6 +13,8 @@ export const useManagers = () =>
       const { data } = await api.get<Manager[]>("/users");
       return data.filter((m) => !m.deleted);
     },
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
   });
 
 export const useManagersPayoutMeta = (managerIds: string[]) => {

@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { message } from "antd";
+import { useMemo } from "react";
 import { api } from "../../api/httpClient";
 import type { PaginatedRepairs, RepairStatus, RepairTicket } from "./types";
 
@@ -8,13 +9,31 @@ export const useRepairs = (params?: {
   limit?: number;
   offset?: number;
 }) =>
-  useQuery({
-    queryKey: ["repairs", params],
-    queryFn: async (): Promise<PaginatedRepairs> => {
-      const { data } = await api.get<PaginatedRepairs>("/repairs", { params });
-      return data;
-    },
-  });
+  {
+    const normalizedParams = useMemo(
+      () => ({
+        q: params?.q || "",
+        limit: params?.limit ?? 50,
+        offset: params?.offset ?? 0,
+      }),
+      [params?.q, params?.limit, params?.offset],
+    );
+
+    return useQuery({
+      queryKey: ["repairs", normalizedParams],
+      queryFn: async (): Promise<PaginatedRepairs> => {
+        const { data } = await api.get<PaginatedRepairs>("/repairs", {
+          params: {
+            q: normalizedParams.q || undefined,
+            limit: normalizedParams.limit,
+            offset: normalizedParams.offset,
+          },
+        });
+        return data;
+      },
+      placeholderData: keepPreviousData,
+    });
+  };
 
 export const useCreateRepairTicket = () => {
   const queryClient = useQueryClient();

@@ -121,12 +121,12 @@ export const EmployeeDetailsModal = ({
             <Col xs={12} md={6}>
               <Card size="small">
                 <Statistic
-                  title="Бонусы"
+                  title="Выплачено ЗП/Бонус"
                   value={details.bonusesTotal}
                   suffix="c"
                   styles={{
                     content: {
-                      color: "#52c41a",
+                      color: "#1677ff",
                     },
                   }}
                 />
@@ -238,8 +238,8 @@ export const EmployeeDetailsModal = ({
                       {
                         title: "Тип",
                         render: (_v, item) => (
-                          <Tag color={item.type === "bonus" ? "green" : "orange"}>
-                            {item.type === "bonus" ? "Бонус" : "Удержание"}
+                          <Tag color={item.type === "bonus" ? "blue" : "orange"}>
+                            {item.type === "bonus" ? "Выплата ЗП/Бонус" : "Удержание"}
                           </Tag>
                         ),
                       },
@@ -254,13 +254,9 @@ export const EmployeeDetailsModal = ({
                         align: "right",
                         render: (_v, item) => (
                           <span
-                            className={
-                              item.type === "bonus"
-                                ? "text-green-600 font-semibold"
-                                : "text-orange-600 font-semibold"
-                            }
+                            className="text-orange-600 font-semibold"
                           >
-                            {item.type === "bonus" ? "+" : "-"}
+                            -
                             {item.amount.toLocaleString()} c
                           </span>
                         ),

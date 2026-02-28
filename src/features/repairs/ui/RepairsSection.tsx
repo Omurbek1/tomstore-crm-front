@@ -67,7 +67,10 @@ export const RepairsSection = ({
   const createEvent = useCreateRepairEvent();
   const updateStatus = useUpdateRepairStatus();
 
-  const tickets = repairsQuery.data?.items || [];
+  const tickets = useMemo(
+    () => repairsQuery.data?.items || [],
+    [repairsQuery.data?.items],
+  );
 
   const selectedTicket = useMemo<RepairTicket | null>(() => {
     if (tickets.length === 0) return null;
@@ -220,7 +223,7 @@ export const RepairsSection = ({
                   render: (_v, r) => (
                     <div>
                       <div className="font-semibold">{r.clientName}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-slate-500 dark:text-slate-300">
                         {r.itemName}
                         {r.branchName ? ` · ${r.branchName}` : ""}
                       </div>
@@ -300,7 +303,7 @@ export const RepairsSection = ({
                     items={(selectedTicket.messages || []).map((m) => ({
                       children: (
                         <div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-slate-500 dark:text-slate-300">
                             {m.author} · {formatDate(m.createdAt, true)}
                           </div>
                           <div>{m.text}</div>

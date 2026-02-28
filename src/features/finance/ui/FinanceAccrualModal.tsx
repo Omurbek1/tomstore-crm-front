@@ -7,7 +7,7 @@ type ManagerLike = {
 };
 
 type Values = {
-  type: "salary" | "advance";
+  type: "salary" | "bonus" | "advance";
   managerId: string;
   amount: number;
   reason?: string;
@@ -39,11 +39,13 @@ export const FinanceAccrualModal = ({
 }: Props) => {
   const [form] = Form.useForm<Values>();
   const selectedManagerId = Form.useWatch("managerId", form);
+  const selectedType = Form.useWatch("type", form) || "salary";
   const selectedMeta = useMemo(
     () => (selectedManagerId ? managerPayoutMeta[selectedManagerId] : undefined),
     [selectedManagerId, managerPayoutMeta],
   );
   const maxAllowed = selectedMeta?.maxPayable ?? 0;
+  const requiresManagerLimit = selectedType === "salary" || selectedType === "advance";
 
   return (
     <Modal
@@ -58,7 +60,8 @@ export const FinanceAccrualModal = ({
       <Form form={form} layout="vertical" onFinish={onSubmit}>
         <Form.Item name="type" initialValue="salary">
           <Radio.Group>
-            <Radio.Button value="salary">ЗП/Бонус</Radio.Button>
+            <Radio.Button value="salary">ЗП</Radio.Button>
+            <Radio.Button value="bonus">Бонус от компании</Radio.Button>
             <Radio.Button value="advance">Аванс</Radio.Button>
           </Radio.Group>
         </Form.Item>
@@ -74,9 +77,15 @@ export const FinanceAccrualModal = ({
 
         {selectedMeta ? (
           <div className="mb-3">
-            <Typography.Text type="secondary">
-              Макс. к выплате сейчас: <b>{maxAllowed.toLocaleString()} c</b>
-            </Typography.Text>
+            {requiresManagerLimit ? (
+              <Typography.Text type="secondary">
+                Макс. к выплате сейчас: <b>{maxAllowed.toLocaleString()} c</b>
+              </Typography.Text>
+            ) : (
+              <Typography.Text type="secondary">
+                Бонус от компании не ограничен балансом менеджера.
+              </Typography.Text>
+            )}
             {selectedMeta.debt < 0 ? (
               <Alert
                 className="mt-2"
@@ -97,6 +106,7 @@ export const FinanceAccrualModal = ({
               validator: (_rule, value) => {
                 const num = Number(value || 0);
                 if (!selectedManagerId) return Promise.resolve();
+                if (!requiresManagerLimit) return Promise.resolve();
                 if (num <= maxAllowed) return Promise.resolve();
                 return Promise.reject(
                   new Error(`Нельзя больше ${maxAllowed.toLocaleString()} c`),
@@ -105,7 +115,11 @@ export const FinanceAccrualModal = ({
             },
           ]}
         >
-          <InputNumber min={0} max={maxAllowed} style={{ width: "100%" }} />
+          <InputNumber
+            min={0}
+            max={requiresManagerLimit ? maxAllowed : undefined}
+            style={{ width: "100%" }}
+          />
         </Form.Item>
         <Form.Item name="reason" label="Комментарий">
           <Input />

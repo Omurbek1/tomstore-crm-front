@@ -17,6 +17,7 @@ type OwnerStats = {
   revenue: number;
   expensesTotal: number;
   bonusesTotal: number;
+  autoSalaryBonusTotal?: number;
   netProfit: number;
 };
 
@@ -36,6 +37,8 @@ type OwnerManagerRow = {
   role: string;
   orders: number;
   revenue: number;
+  autoBonusKpi?: number;
+  accruedSalary?: number;
   payout: number;
 };
 
@@ -127,6 +130,15 @@ export const OwnerReportSection = ({
         <Col xs={12} sm={8} lg={6}>
           <Card size="small">
             <Statistic
+              title="Авто KPI бонус"
+              value={ownerStats.autoSalaryBonusTotal || 0}
+              suffix="c"
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} lg={6}>
+          <Card size="small">
+            <Statistic
               title="Чистая прибыль"
               value={ownerStats.netProfit}
               suffix="c"
@@ -195,6 +207,16 @@ export const OwnerReportSection = ({
               title: "Выручка",
               dataIndex: "revenue",
               render: (v: number) => `${v.toLocaleString()} c`,
+            },
+            {
+              title: "Авто KPI бонус",
+              dataIndex: "autoBonusKpi",
+              render: (v: number) => `${Number(v || 0).toLocaleString()} c`,
+            },
+            {
+              title: "Начислено ЗП",
+              dataIndex: "accruedSalary",
+              render: (v: number) => `${Number(v || 0).toLocaleString()} c`,
             },
             {
               title: "К выплате",

@@ -22,6 +22,16 @@ export const useCreateTarget = () => {
   });
 };
 
+export const useUpdateTarget = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { id: string; data: Partial<BonusTarget> }) => {
+      await api.patch(`/targets/${params.id}`, params.data);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["targets"] }),
+  });
+};
+
 export const useDeleteTarget = () => {
   const queryClient = useQueryClient();
   return useMutation({

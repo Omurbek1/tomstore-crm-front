@@ -35,6 +35,31 @@ const { Option } = Select;
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
 
+type DashboardMarketingKpi = {
+  managerId: string;
+  month: string;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  salaryBonus?: number;
+  salaryTotal?: number;
+};
+
+const hasMarketingRole = (manager?: Manager | null) => {
+  if (!manager) return false;
+  const tokens = new Set<string>([
+    String(manager.role || "")
+      .trim()
+      .toLowerCase(),
+    ...((manager.roles || []) as string[]).map((r) =>
+      String(r || "")
+        .trim()
+        .toLowerCase(),
+    ),
+  ]);
+  return tokens.has("smm") || tokens.has("marketing");
+};
+
+
 export const Dashboard = ({
   sales,
   expenses,
@@ -42,6 +67,7 @@ export const Dashboard = ({
   managers,
   branches,
   targets,
+  marketingKpis,
   user,
 }: {
   sales: Sale[];
@@ -50,10 +76,14 @@ export const Dashboard = ({
   managers: Manager[];
   branches: Branch[];
   targets: BonusTarget[];
+  marketingKpis: DashboardMarketingKpi[];
   user: Manager;
 }) => {
   const { appTheme } = useAppStore();
   const isDark = appTheme === "dark";
+  const mutedTextClass = isDark ? "text-slate-300" : "text-gray-400";
+  const subtleBorderClass = isDark ? "border-slate-700/70" : "border-gray-100";
+  const managerCardClass = isDark ? "bg-slate-800/70 border-slate-700/70" : "bg-gray-50";
   const isSuperAdmin =
     user.role === "superadmin" || user.roles?.includes("superadmin");
   const hasAdminAccess =
@@ -70,6 +100,23 @@ export const Dashboard = ({
   ]);
   const [selectedBranchNames, setSelectedBranchNames] = useState<string[]>([]);
   const [selectedManagerId, setSelectedManagerId] = useState<string>("all");
+  const normalizePayoutReason = (reason?: string | null) =>
+    String(reason || "").trim();
+  const isCompanyBonusReason = (reason?: string | null) => {
+    const value = normalizePayoutReason(reason);
+    return value.startsWith("BONUS::") || value.startsWith("TARGET_BONUS::");
+  };
+  const isSalaryPayoutReason = (reason?: string | null) =>
+    !isCompanyBonusReason(reason);
+  const stripPayoutReasonPrefix = (reason?: string | null) =>
+    normalizePayoutReason(reason)
+      .replace(/^SALARY::\s*/i, "")
+      .replace(/^BONUS::\s*/i, "")
+      .replace(/^TARGET_BONUS::\s*/i, "");
+  const isManagerLinkedExpense = (expense: Expense) =>
+    Boolean(expense.managerId || expense.managerName);
+  const getKpiEffectiveDate = (kpi: DashboardMarketingKpi) =>
+    kpi.periodEnd || kpi.periodStart || dayjs(`${kpi.month}-01`).endOf("month").toISOString();
 
   const availableBranchNames = useMemo(() => {
     const set = new Set<string>([
@@ -85,6 +132,11 @@ export const Dashboard = ({
         ? new Set(selectedBranchNames)
         : null,
     [isSuperAdmin, selectedBranchNames],
+  );
+
+  const marketingManagerIdSet = useMemo(
+    () => new Set((managers || []).filter(hasMarketingRole).map((m) => m.id)),
+    [managers],
   );
 
   const isWithinPeriod = (dateValue?: string | null) => {
@@ -157,14 +209,52 @@ export const Dashboard = ({
     });
   }, [bonuses, managers, period, periodDate, customRange, branchFilterSet]);
 
+  const filteredMarketingKpis = useMemo(() => {
+    const managerSet = branchFilterSet
+      ? new Set(
+          managers
+            .filter((m) => branchFilterSet.has(m.branchName || ""))
+            .map((m) => m.id),
+        )
+      : null;
+    return (marketingKpis || []).filter((k) => {
+      if (!isWithinPeriod(getKpiEffectiveDate(k))) return false;
+      if (!k.managerId || !marketingManagerIdSet.has(k.managerId)) return false;
+      if (!managerSet) return true;
+      return !!k.managerId && managerSet.has(k.managerId);
+    });
+  }, [
+    marketingKpis,
+    managers,
+    period,
+    periodDate,
+    customRange,
+    branchFilterSet,
+    marketingManagerIdSet,
+  ]);
+
   const stats = useMemo(() => {
     const totalRev = filteredSales.reduce((acc, s) => acc + s.total, 0);
-    const regularExpenses = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
-    const bonusesAsExpense = filteredBonuses.reduce((acc, b) => acc + b.amount, 0);
-    const totalExp = regularExpenses + bonusesAsExpense;
+    const regularExpenses = filteredExpenses
+      .filter((e) => !isManagerLinkedExpense(e))
+      .filter((e) => e.category !== "Аванс" && e.category !== "Штраф")
+      .reduce((acc, e) => acc + e.amount, 0);
+    const bonusesAsExpense = filteredBonuses
+      .filter((b) => isCompanyBonusReason(b.reason))
+      .reduce((acc, b) => acc + b.amount, 0);
+    const kpiBonusExpense = filteredMarketingKpis.reduce(
+      (acc, k) => acc + Math.max(0, Number(k.salaryBonus || 0)),
+      0,
+    );
+    const totalExp = regularExpenses + bonusesAsExpense + kpiBonusExpense;
     const mySales = filteredSales.filter((s) => s.managerId === user.id);
     const myRev = mySales.reduce((acc, s) => acc + s.total, 0);
-    const myEarnings = mySales.reduce((acc, s) => acc + s.managerEarnings, 0);
+    const isCurrentUserMarketing = hasMarketingRole(user);
+    const myKpiAccrued = filteredMarketingKpis
+      .filter((k) => isCurrentUserMarketing && k.managerId === user.id)
+      .reduce((acc, k) => acc + Number(k.salaryTotal || 0), 0);
+    const myEarnings =
+      mySales.reduce((acc, s) => acc + s.managerEarnings, 0) + myKpiAccrued;
     const netProfit =
       filteredSales.reduce((acc, s) => {
         return (
@@ -184,8 +274,9 @@ export const Dashboard = ({
       count: filteredSales.length,
       avgCheck,
       myEarnings,
+      kpiBonusExpense,
     };
-  }, [filteredSales, filteredExpenses, filteredBonuses, user]);
+  }, [filteredSales, filteredExpenses, filteredBonuses, filteredMarketingKpis, user]);
 
   const chartData = useMemo(() => {
     const days =
@@ -226,17 +317,24 @@ export const Dashboard = ({
             (e.category === "Аванс" || e.category === "Штраф") &&
             (e.managerId === m.id || e.managerName === m.name),
         );
+        const mk = filteredMarketingKpis.filter((k) => k.managerId === m.id);
         const earnings = ms.reduce((a, s) => a + s.managerEarnings, 0);
-        const bonusesTotal = mb.reduce((a, b) => a + b.amount, 0);
+        const kpiAccrued = mk.reduce((a, k) => a + Number(k.salaryTotal || 0), 0);
+        const kpiBonus = mk.reduce((a, k) => a + Math.max(0, Number(k.salaryBonus || 0)), 0);
+        const salaryPayoutsTotal = mb
+          .filter((b) => isSalaryPayoutReason(b.reason))
+          .reduce((a, b) => a + b.amount, 0);
         const advancesTotal = me.reduce((a, e) => a + e.amount, 0);
         return {
           ...m,
           count: ms.length,
           rev: ms.reduce((a, s) => a + s.total, 0),
           earnings,
-          bonusesTotal,
+          kpiAccrued,
+          kpiBonus,
+          salaryPayoutsTotal,
           advancesTotal,
-          totalSalary: earnings + bonusesTotal - advancesTotal,
+          totalSalary: earnings + kpiAccrued - salaryPayoutsTotal - advancesTotal,
           avgCheck:
             ms.length > 0
               ? Math.round(ms.reduce((a, s) => a + s.total, 0) / ms.length)
@@ -244,7 +342,7 @@ export const Dashboard = ({
         };
       })
       .sort((a, b) => b.rev - a.rev);
-  }, [managers, filteredSales, filteredBonuses, filteredExpenses, branchFilterSet]);
+  }, [managers, filteredSales, filteredBonuses, filteredExpenses, filteredMarketingKpis, branchFilterSet]);
 
   const managerReportData = useMemo(() => {
     if (selectedManagerId === "all") return managerStats;
@@ -282,17 +380,18 @@ export const Dashboard = ({
 
   const globalTargets = (targets || []).filter((t) => t.type === "global");
   const personalTargets = (targets || []).filter((t) => t.type === "personal");
-  const totalRevAll = (sales || []).reduce((a, s) => a + s.total, 0);
+  const totalRevAll = filteredSales.reduce((a, s) => a + s.total, 0);
+
 
   const recentActivity = useMemo(() => {
-    const bonusItems = (bonuses || []).slice(0, 3).map((b) => ({
+    const bonusItems = filteredBonuses.slice(0, 3).map((b) => ({
       key: `b-${b.id}`,
       color: "green" as const,
       date: b.createdAt,
       content: (
         <div>
-          <span className="font-semibold">{b.managerName}</span> — бонус {b.amount} c
-          <div className="text-xs text-gray-400">{formatDate(b.createdAt, true)}</div>
+          <span className="font-semibold">{b.managerName}</span> — {stripPayoutReasonPrefix(b.reason) || "Выплата"} {b.amount} c
+          <div className={`text-xs ${mutedTextClass}`}>{formatDate(b.createdAt, true)}</div>
         </div>
       ),
     }));
@@ -305,7 +404,7 @@ export const Dashboard = ({
         <div>
           <span className="font-semibold">{s.managerName}</span> — {s.productName}{" "}
           {s.total.toLocaleString()} c
-          <div className="text-xs text-gray-400">{formatDate(s.manualDate || s.createdAt, true)}</div>
+          <div className={`text-xs ${mutedTextClass}`}>{formatDate(s.manualDate || s.createdAt, true)}</div>
         </div>
       ),
     }));
@@ -314,7 +413,7 @@ export const Dashboard = ({
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 6)
       .map(({ key, color, content }) => ({ key, color, content }));
-  }, [bonuses, filteredSales]);
+  }, [filteredBonuses, filteredSales, mutedTextClass]);
 
   return (
     <div className="space-y-5 min-w-0">
@@ -441,7 +540,7 @@ export const Dashboard = ({
           <Card title="Топ менеджеры" size="small">
             <div className="space-y-3">
               {managerStats.slice(0, 5).map((m, idx) => (
-                <div key={m.id} className="border-b border-gray-100 pb-2 last:border-0">
+                <div key={m.id} className={`border-b pb-2 last:border-0 ${subtleBorderClass}`}>
                   <div className="flex items-center gap-2 w-full">
                     <Badge
                       count={idx + 1}
@@ -492,8 +591,11 @@ export const Dashboard = ({
                       <Tag color="gold">Бонус: {t.reward} c</Tag>
                     </div>
                     {t.deadline && (
-                      <div className="text-xs text-gray-400 mb-1">
-                        до {formatDate(t.deadline)} ·{" "}
+                      <div className={`text-xs mb-1 ${mutedTextClass}`}>
+                        {t.startDate
+                          ? `с ${formatDate(t.startDate)} до ${formatDate(t.deadline)}`
+                          : `до ${formatDate(t.deadline)}`}{" "}
+                        ·{" "}
                         {daysLeft !== null && daysLeft >= 0
                           ? `осталось ${daysLeft} дн`
                           : `просрочено на ${Math.abs(daysLeft ?? 0)} дн`}
@@ -505,7 +607,7 @@ export const Dashboard = ({
               })}
               {personalTargets.map((t) => {
                 const managerName = managers.find((m) => m.id === t.managerId)?.name || "Сотрудник";
-                const personalIncome = (sales || [])
+                const personalIncome = filteredSales
                   .filter((s) => s.managerId === t.managerId)
                   .reduce((sum, s) => sum + s.total, 0);
                 const pct = Math.min(100, Math.round((personalIncome / t.amount) * 100));
@@ -522,8 +624,11 @@ export const Dashboard = ({
                       <Tag color="purple">Личная</Tag>
                     </div>
                     {t.deadline && (
-                      <div className="text-xs text-gray-400 mb-1">
-                        до {formatDate(t.deadline)} ·{" "}
+                      <div className={`text-xs mb-1 ${mutedTextClass}`}>
+                        {t.startDate
+                          ? `с ${formatDate(t.startDate)} до ${formatDate(t.deadline)}`
+                          : `до ${formatDate(t.deadline)}`}{" "}
+                        ·{" "}
                         {daysLeft !== null && daysLeft >= 0
                           ? `осталось ${daysLeft} дн`
                           : `просрочено на ${Math.abs(daysLeft ?? 0)} дн`}
@@ -550,15 +655,15 @@ export const Dashboard = ({
               <Col xs={12} sm={8} md={6} key={m.id}>
                 <Card
                   size="small"
-                  className={`text-center ${isDark ? "bg-gray-800" : "bg-gray-50"}`}
+                  className={`text-center border ${managerCardClass}`}
                 >
                   <Avatar icon={<UserOutlined />} className="mb-2" />
                   <div className="font-semibold truncate">{m.name}</div>
                   <Divider style={{ margin: "8px 0" }} />
-                  <div className="text-xs text-gray-400">{m.count} продаж</div>
+                  <div className={`text-xs ${mutedTextClass}`}>{m.count} продаж</div>
                   <div className="text-green-600 font-bold">{m.totalSalary.toLocaleString()} c</div>
-                  <div className="text-[11px] text-gray-400 mt-1">
-                    ЗП: {m.earnings.toLocaleString()} · Бонус: +{m.bonusesTotal.toLocaleString()} ·
+                  <div className={`text-[11px] mt-1 ${mutedTextClass}`}>
+                    ЗП: {m.earnings.toLocaleString()} · KPI: +{m.kpiAccrued.toLocaleString()} · Выплачено: -{m.salaryPayoutsTotal.toLocaleString()} ·
                     Аванс/Штраф: -{m.advancesTotal.toLocaleString()}
                   </div>
                 </Card>
@@ -619,9 +724,14 @@ export const Dashboard = ({
                 render: (v: number) => `${v.toLocaleString()} c`,
               },
               {
-                title: "Бонусы",
-                dataIndex: "bonusesTotal",
-                render: (v: number) => <span className="text-green-600">+{v.toLocaleString()} c</span>,
+                title: "KPI начисление",
+                dataIndex: "kpiAccrued",
+                render: (v: number) => <span className="text-purple-600">+{v.toLocaleString()} c</span>,
+              },
+              {
+                title: "Выплачено",
+                dataIndex: "salaryPayoutsTotal",
+                render: (v: number) => <span className="text-blue-600">-{v.toLocaleString()} c</span>,
               },
               {
                 title: "Аванс/Штраф",

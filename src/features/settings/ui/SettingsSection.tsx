@@ -6,11 +6,13 @@ import {
   Form,
   type FormInstance,
   Input,
+  message,
   Row,
   Space,
   Statistic,
   Switch,
   Segmented,
+  Select,
   Table,
   Tag,
   Upload,
@@ -23,6 +25,7 @@ import {
   UserOutlined,
 } from "@ant-design/icons";
 import { toSafeMediaUrl } from "../../../security/url";
+import { useState } from "react";
 
 type DeliveryStatusCode =
   | "reserved"
@@ -62,6 +65,7 @@ type Props = {
   companyForm: FormInstance<{
     companyName?: string;
     companyLogoUrl?: string;
+    manualPaymentTypes?: string[];
   }>;
   isUploadingCompanyLogo: boolean;
   profileSubmitting: boolean;
@@ -70,6 +74,7 @@ type Props = {
   onCompanySubmit: (values: {
     companyName?: string;
     companyLogoUrl?: string;
+    manualPaymentTypes?: string[];
   }) => void;
   onThemeChange: (dark: boolean) => void;
   onUiModeChange: (mode: UiMode) => void;
@@ -96,9 +101,32 @@ export const SettingsSection = ({
   formatDate,
   deliveryStatuses,
 }: Props) => {
+  const [newManualPaymentType, setNewManualPaymentType] = useState("");
   const mySales = sales.filter((s) => s.managerId === user.id);
   const myRev = mySales.reduce((a, s) => a + s.total, 0);
   const myEarnings = mySales.reduce((a, s) => a + s.managerEarnings, 0);
+
+  const addManualPaymentType = () => {
+    const value = String(newManualPaymentType || "").trim();
+    if (!value) {
+      message.warning("Введите название ручного типа оплаты");
+      return;
+    }
+    if (value.toLowerCase() === "hybrid" || value.toLowerCase() === "гибрид") {
+      message.warning("Гибрид нельзя добавлять в ручные типы");
+      return;
+    }
+    const current = (companyForm.getFieldValue("manualPaymentTypes") ||
+      []) as string[];
+    if (
+      current.some((item) => item.toLowerCase() === value.toLowerCase())
+    ) {
+      message.warning("Такой тип оплаты уже добавлен");
+      return;
+    }
+    companyForm.setFieldValue("manualPaymentTypes", [...current, value]);
+    setNewManualPaymentType("");
+  };
 
   return (
     <Row gutter={[24, 24]}>
@@ -174,6 +202,50 @@ export const SettingsSection = ({
               <Form.Item name="companyLogoUrl" hidden>
                 <Input />
               </Form.Item>
+              <Form.Item
+                name="manualPaymentTypes"
+                label="Ручные типы оплаты"
+                tooltip='Используются в продажах как "manual". Гибрид здесь не добавляется.'
+              >
+                <Select mode="multiple" style={{ display: "none" }} />
+              </Form.Item>
+              <Space direction="vertical" style={{ width: "100%" }}>
+                <div className="flex gap-2">
+                  <Input
+                    value={newManualPaymentType}
+                    placeholder="Например: MBank, Терминал, QR"
+                    onChange={(e) => setNewManualPaymentType(e.target.value)}
+                    onPressEnter={(e) => {
+                      e.preventDefault();
+                      addManualPaymentType();
+                    }}
+                  />
+                  <Button onClick={addManualPaymentType}>Добавить</Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(
+                    (companyForm.getFieldValue("manualPaymentTypes") ||
+                      []) as string[]
+                  ).map((item) => (
+                    <Tag
+                      key={item}
+                      closable
+                      onClose={(e) => {
+                        e.preventDefault();
+                        const current = (companyForm.getFieldValue(
+                          "manualPaymentTypes",
+                        ) || []) as string[];
+                        companyForm.setFieldValue(
+                          "manualPaymentTypes",
+                          current.filter((x) => x !== item),
+                        );
+                      }}
+                    >
+                      {item}
+                    </Tag>
+                  ))}
+                </div>
+              </Space>
               <Button
                 type="primary"
                 htmlType="submit"

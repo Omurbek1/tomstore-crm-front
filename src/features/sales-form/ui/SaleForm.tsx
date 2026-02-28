@@ -29,6 +29,7 @@ type Props = {
   isAdmin: boolean;
   currentUser?: { id?: string; name?: string; branchName?: string } | null;
   isDark: boolean;
+  manualPaymentTypes?: string[];
   getAvailableStock: (product: any, products: any[]) => number;
   onSubmit: (vals: any) => void;
 };
@@ -52,6 +53,7 @@ export const SaleForm = ({
   isAdmin,
   currentUser,
   isDark,
+  manualPaymentTypes = [],
   getAvailableStock,
   onSubmit,
 }: Props) => {
@@ -450,10 +452,30 @@ export const SaleForm = ({
             <Form.Item
               name="paymentLabel"
               label="Тип оплаты (ручной)"
-              rules={[{ required: true, message: "Введите тип оплаты" }]}
+              rules={[{ required: true, message: "Выберите тип оплаты" }]}
             >
-              <Input placeholder="Например: Kaspi / MBank / терминал" />
+              <Select
+                showSearch
+                optionFilterProp="children"
+                placeholder={
+                  manualPaymentTypes.length > 0
+                    ? "Выберите тип оплаты"
+                    : "Нет доступных ручных типов"
+                }
+                disabled={manualPaymentTypes.length === 0}
+              >
+                {manualPaymentTypes.map((type) => (
+                  <Option key={type} value={type}>
+                    {type}
+                  </Option>
+                ))}
+              </Select>
             </Form.Item>
+            {manualPaymentTypes.length === 0 ? (
+              <div className="text-xs text-gray-500 -mt-2">
+                Ручные типы оплаты добавляет только admin/superadmin в Настройках.
+              </div>
+            ) : null}
           </Col>
         </Row>
       )}

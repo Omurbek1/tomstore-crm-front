@@ -1,7 +1,9 @@
-import { Button, Card, Col, Input, Popconfirm, Row, Space, Table, Tag } from "antd";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, Button, Card, Col, Input, Popconfirm, Row, Space, Table, Tag, Typography } from "antd";
 import { DeleteOutlined, EditOutlined, LinkOutlined, PlayCircleOutlined, PlusOutlined, SearchOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import { toSafeExternalUrl } from "../../../security/url";
+import { useAiMaterialsHelp } from "../../../hooks/api";
 import type {
   MaterialType,
   PaginatedMaterials,
@@ -25,6 +27,13 @@ type MaterialsPanelProps = {
   onPageChange: (page: number, pageSize: number) => void;
   onDelete: (id: string) => void;
   formatDate: (value?: string | null, withTime?: boolean) => string;
+  aiAudience?: "manager" | "marketing" | "smm" | "general";
+};
+
+type AiChatHistoryItem = {
+  question: string;
+  answer: string;
+  createdAt: string;
 };
 
 export const MaterialsPanel = ({
@@ -43,7 +52,96 @@ export const MaterialsPanel = ({
   onPageChange,
   onDelete,
   formatDate,
+  aiAudience = "general",
 }: MaterialsPanelProps) => {
+  const aiMaterialsHelp = useAiMaterialsHelp();
+  const [aiQuestion, setAiQuestion] = useState("");
+  const [aiAnswer, setAiAnswer] = useState<{
+    answer: string;
+    recommendedMaterials: Array<{
+      id?: string;
+      title: string;
+      reason?: string;
+      url?: string;
+    }>;
+  } | null>(null);
+  const [aiHistory, setAiHistory] = useState<AiChatHistoryItem[]>([]);
+  const aiHistoryStorageKey = `materials_ai_history_${aiAudience}`;
+
+  const folderMap = useMemo(
+    () => new Map(folders.map((f) => [f.id, f.name] as const)),
+    [folders],
+  );
+
+  const aiMaterialsContext = useMemo(
+    () =>
+      (materialsPage.items || []).map((m) => ({
+        id: m.id,
+        title: m.title,
+        description: m.description,
+        type: m.type,
+        url: m.url,
+        folderName: m.folderId ? folderMap.get(m.folderId) : "Без папки",
+      })),
+    [materialsPage.items, folderMap],
+  );
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(aiHistoryStorageKey);
+      if (!raw) {
+        setAiHistory([]);
+        return;
+      }
+      const parsed = JSON.parse(raw) as AiChatHistoryItem[];
+      if (Array.isArray(parsed)) {
+        setAiHistory(parsed.slice(-20));
+      } else {
+        setAiHistory([]);
+      }
+    } catch {
+      setAiHistory([]);
+    }
+  }, [aiHistoryStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(aiHistoryStorageKey, JSON.stringify(aiHistory.slice(-20)));
+    } catch {
+      // ignore localStorage write errors
+    }
+  }, [aiHistory, aiHistoryStorageKey]);
+
+  const askAi = async () => {
+    const question = String(aiQuestion || "").trim();
+    if (!question) return;
+    const result = await aiMaterialsHelp.mutateAsync({
+      question,
+      audience: aiAudience,
+      locale: "ru",
+      history: aiHistory.slice(-8).map((x) => ({
+        question: x.question,
+        answer: x.answer,
+        createdAt: x.createdAt,
+      })),
+      materials: aiMaterialsContext,
+    });
+    setAiAnswer({
+      answer: result.answer,
+      recommendedMaterials: result.recommendedMaterials || [],
+    });
+    setAiHistory((prev) =>
+      [
+        ...prev,
+        {
+          question,
+          answer: String(result.answer || "").trim(),
+          createdAt: new Date().toISOString(),
+        },
+      ].slice(-20),
+    );
+  };
+
   const columns: ColumnsType<TrainingMaterial> = [
     {
       title: "Материал",
@@ -203,6 +301,102 @@ export const MaterialsPanel = ({
                 </Button>
               )}
             </div>
+
+            <Card
+              size="small"
+              className="mb-3"
+              title="ИИ-помощник по материалам"
+              extra={
+                <Space>
+                  <Button
+                    size="small"
+                    onClick={askAi}
+                    loading={aiMaterialsHelp.isPending}
+                  >
+                    Спросить ИИ
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setAiQuestion("");
+                      setAiAnswer(null);
+                    }}
+                    disabled={!aiQuestion && !aiAnswer}
+                  >
+                    Очистить
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() => setAiHistory([])}
+                    disabled={aiHistory.length === 0}
+                  >
+                    Очистить историю
+                  </Button>
+                </Space>
+              }
+            >
+              <Input.TextArea
+                rows={3}
+                value={aiQuestion}
+                onChange={(e) => setAiQuestion(e.target.value)}
+                placeholder="Например: Как правильно закрывать возражения клиента по рассрочке?"
+              />
+              <Typography.Text type="secondary" className="block mt-2">
+                ИИ отвечает по текущим материалам раздела и подсказывает, что изучить дальше.
+              </Typography.Text>
+              {aiAnswer ? (
+                <div className="mt-3 space-y-2">
+                  <Alert type="info" showIcon message={aiAnswer.answer} />
+                  {aiAnswer.recommendedMaterials.map((item, idx) => {
+                    const safeUrl = toSafeExternalUrl(item.url);
+                    return (
+                      <Alert
+                        key={`${item.title}-${idx}`}
+                        type="success"
+                        showIcon
+                        message={item.title}
+                        description={
+                          <div className="space-y-1">
+                            {item.reason ? <div>{item.reason}</div> : null}
+                            {safeUrl ? (
+                              <a href={safeUrl} target="_blank" rel="noopener noreferrer">
+                                Открыть материал
+                              </a>
+                            ) : null}
+                          </div>
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              ) : null}
+              {aiHistory.length > 0 ? (
+                <Card size="small" className="mt-3" type="inner" title="История чата">
+                  <div className="max-h-56 overflow-y-auto space-y-2">
+                    {aiHistory
+                      .slice()
+                      .reverse()
+                      .map((item, idx) => (
+                        <Alert
+                          key={`${item.createdAt}-${idx}`}
+                          type="info"
+                          showIcon
+                          message={item.question}
+                          description={
+                            <div className="space-y-1">
+                              <div>{item.answer}</div>
+                              <Typography.Text type="secondary">
+                                {new Date(item.createdAt).toLocaleString()}
+                              </Typography.Text>
+                            </div>
+                          }
+                        />
+                      ))}
+                  </div>
+                </Card>
+              ) : null}
+            </Card>
+
             <Table
               rowKey="id"
               size="small"

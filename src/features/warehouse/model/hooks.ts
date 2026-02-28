@@ -40,6 +40,7 @@ export const useInventoryProducts = (search: string, branchName?: string) => {
     queryFn: async () => {
       const { data } = await api.get<WarehouseProduct[]>("/inventory/products", {
         params: {
+          all: 1,
           ...(search.trim() ? { q: search.trim() } : {}),
           ...(branchName?.trim() ? { branchName: branchName.trim() } : {}),
         },

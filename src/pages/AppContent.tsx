@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   Layout,
   Menu,
   Button,
   Modal,
   Form,
+  Spin,
   message,
 } from "antd";
 import {
@@ -19,6 +20,8 @@ import {
   SolutionOutlined,
   ReadOutlined,
   ToolOutlined,
+  UnorderedListOutlined,
+  DotChartOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/ru";
@@ -49,6 +52,7 @@ import {
   useExpenses,
   useImportProducts,
   useIssueTargetReward,
+  useMarketingKpi,
   useManagers,
   useManagersPayoutMeta,
   useMaterialFolders,
@@ -88,26 +92,17 @@ import {
   type TrainingMaterial,
 } from "../entities/material/model/types";
 import { useMaterialsFilters } from "../features/materials-list/model/useMaterialsFilters";
-import { MaterialsPanel } from "../features/materials-list/ui/MaterialsPanel";
 import { useSalesFilters } from "../features/sales-list/model/useSalesFilters";
-import { SalesTable } from "../features/sales-list/ui/SalesTable";
-import { Dashboard } from "../features/dashboard/ui/Dashboard";
-import { WarehousePanel } from "../features/warehouse/ui/WarehousePanel";
 import { LoginScreen } from "../features/auth/ui/LoginScreen";
 import type { InventoryMovement } from "../features/warehouse/model/hooks";
 import { ProductModal } from "../features/products-list/ui/ProductModal";
 import { CreateProductModal } from "../features/products-list/ui/CreateProductModal";
-import { ManagersSection } from "../features/managers-list/ui/ManagersSection";
-import { FinanceSection } from "../features/finance/ui/FinanceSection";
-import { SettingsSection } from "../features/settings/ui/SettingsSection";
 import { FinanceAccrualModal } from "../features/finance/ui/FinanceAccrualModal";
 import { BranchCreateModal } from "../features/branches/ui/BranchCreateModal";
-import { BranchesSection } from "../features/branches/ui/BranchesSection";
 import { useBranchDetailsData } from "../features/branches/model/useBranchDetailsData";
 import { ProfileModal } from "../features/profile/ui/ProfileModal";
 import { ManagerModal } from "../features/managers-list/ui/ManagerModal";
 import { SupplierModal } from "../features/suppliers/ui/SupplierModal";
-import { SuppliersSection } from "../features/suppliers/ui/SuppliersSection";
 import { TargetModal } from "../features/targets/ui/TargetModal";
 import { MaterialModal } from "../features/materials-list/ui/MaterialModal";
 import { MaterialFolderModal } from "../features/materials-list/ui/MaterialFolderModal";
@@ -118,12 +113,96 @@ import { SalaryHistoryModal } from "../features/managers-list/ui/SalaryHistoryMo
 import { MapAddressPickerModal } from "../features/suppliers/ui/MapAddressPickerModal";
 import { ExpenseForm } from "../features/expenses/ui/ExpenseForm";
 import { SaleForm } from "../features/sales-form/ui/SaleForm";
-import { OwnerReportSection } from "../features/owner-report/ui/OwnerReportSection";
-import { RepairsSection } from "../features/repairs/ui/RepairsSection";
+
+const Dashboard = lazy(() =>
+  import("../features/dashboard/ui/Dashboard").then((m) => ({
+    default: m.Dashboard,
+  })),
+);
+const SalesTable = lazy(() =>
+  import("../features/sales-list/ui/SalesTable").then((m) => ({
+    default: m.SalesTable,
+  })),
+);
+const WarehousePanel = lazy(() =>
+  import("../features/warehouse/ui/WarehousePanel").then((m) => ({
+    default: m.WarehousePanel,
+  })),
+);
+const SuppliersSection = lazy(() =>
+  import("../features/suppliers/ui/SuppliersSection").then((m) => ({
+    default: m.SuppliersSection,
+  })),
+);
+const BranchesSection = lazy(() =>
+  import("../features/branches/ui/BranchesSection").then((m) => ({
+    default: m.BranchesSection,
+  })),
+);
+const ManagersSection = lazy(() =>
+  import("../features/managers-list/ui/ManagersSection").then((m) => ({
+    default: m.ManagersSection,
+  })),
+);
+const FinanceSection = lazy(() =>
+  import("../features/finance/ui/FinanceSection").then((m) => ({
+    default: m.FinanceSection,
+  })),
+);
+const MaterialsPanel = lazy(() =>
+  import("../features/materials-list/ui/MaterialsPanel").then((m) => ({
+    default: m.MaterialsPanel,
+  })),
+);
+const OwnerReportSection = lazy(() =>
+  import("../features/owner-report/ui/OwnerReportSection").then((m) => ({
+    default: m.OwnerReportSection,
+  })),
+);
+const RepairsSection = lazy(() =>
+  import("../features/repairs/ui/RepairsSection").then((m) => ({
+    default: m.RepairsSection,
+  })),
+);
+const CashierModeSection = lazy(() =>
+  import("../features/cashier/ui/CashierModeSection").then((m) => ({
+    default: m.CashierModeSection,
+  })),
+);
+const SettingsSection = lazy(() =>
+  import("../features/settings/ui/SettingsSection").then((m) => ({
+    default: m.SettingsSection,
+  })),
+);
+const TasksSection = lazy(() =>
+  import("../features/tasks/ui/TasksSection").then((m) => ({
+    default: m.TasksSection,
+  })),
+);
+const MarketingKpiSection = lazy(() =>
+  import("../features/marketing-kpi/ui/MarketingKpiSection").then((m) => ({
+    default: m.MarketingKpiSection,
+  })),
+);
+const SalesPlanSection = lazy(() =>
+  import("../features/sales-plan/ui/SalesPlanSection").then((m) => ({
+    default: m.SalesPlanSection,
+  })),
+);
 
 dayjs.locale("ru");
 
 const { Sider, Content } = Layout;
+const sectionLoadingFallback = (
+  <div className="flex items-center justify-center min-h-[45vh]">
+    <div className="rounded-2xl border border-slate-200/70 dark:border-slate-700/70 bg-white/80 dark:bg-slate-900/70 backdrop-blur px-8 py-6 shadow-sm">
+      <div className="flex items-center gap-3 text-slate-600 dark:text-slate-200">
+        <Spin size="large" />
+        <div className="text-sm font-medium">Загрузка раздела...</div>
+      </div>
+    </div>
+  </div>
+);
 
 // --- TYPES ---
 
@@ -199,6 +278,7 @@ interface BonusTarget extends BaseEntity {
   reward: number;
   rewardType?: "money" | "material";
   rewardText?: string | null;
+  startDate?: string;
   deadline?: string;
   rewardIssued?: boolean;
   rewardIssuedAt?: string | null;
@@ -261,12 +341,28 @@ interface Payout {
   reason: string;
 }
 
+interface MarketingKpiEntry extends BaseEntity {
+  managerId: string;
+  managerName: string;
+  managerRole?: string;
+  branchName?: string;
+  month: string;
+  planMode: "week" | "month";
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  kpiScore: number;
+  salaryBase: number;
+  salaryBonus: number;
+  salaryTotal: number;
+}
+
 // --- COMPONENTS ---
 
 const AppContent = () => {
   const { user, appTheme, uiMode, setAppTheme, setUiMode, logout } =
     useAppStore();
   const [activeTab, setActiveTab] = useState("1");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const salesFilters = useSalesFilters();
   const materialsFilters = useMaterialsFilters();
   const {
@@ -283,8 +379,39 @@ const AppContent = () => {
   const isSuperAdmin = hasRole("superadmin");
   const isAdmin = hasRole("admin") || isSuperAdmin;
   const isStorekeeper = hasRole("storekeeper");
+  const isCashier = hasRole("cashier");
+  const isCashierOnly =
+    isCashier && !isAdmin && !isStorekeeper && !hasRole("manager");
   const canAccessWarehouse = isAdmin || isStorekeeper;
   const canStorekeeperManageProducts = isAdmin || !!user?.canManageProducts;
+  const SALARY_REASON_PREFIX = "SALARY::";
+  const BONUS_REASON_PREFIX = "BONUS::";
+  const TARGET_BONUS_REASON_PREFIX = "TARGET_BONUS::";
+  const normalizePayoutReason = (reason?: string | null) =>
+    String(reason || "").trim();
+  const isCompanyBonusReason = (reason?: string | null) => {
+    const value = normalizePayoutReason(reason);
+    return (
+      value.startsWith(BONUS_REASON_PREFIX) ||
+      value.startsWith(TARGET_BONUS_REASON_PREFIX)
+    );
+  };
+  const isSalaryPayoutReason = (reason?: string | null) =>
+    !isCompanyBonusReason(reason);
+  const isManagerLinkedExpense = (expense?: {
+    managerId?: string;
+    managerName?: string;
+  }) => Boolean(expense?.managerId || expense?.managerName);
+  const stripPayoutReasonPrefix = (reason?: string | null) =>
+    normalizePayoutReason(reason)
+      .replace(/^SALARY::\s*/i, "")
+      .replace(/^BONUS::\s*/i, "")
+      .replace(/^TARGET_BONUS::\s*/i, "");
+  const getKpiEffectiveDate = (kpi: MarketingKpiEntry) => {
+    if (kpi.periodEnd) return kpi.periodEnd;
+    if (kpi.periodStart) return kpi.periodStart;
+    return dayjs(`${kpi.month}-01`).endOf("month").toISOString();
+  };
 
   // Data Hooks
   const { data: appSettings } = useAppSettings();
@@ -309,6 +436,11 @@ const AppContent = () => {
   const { data: expenses = [] } = useExpenses();
   const { data: suppliers = [] } = useSuppliers();
   const { data: targets = [] } = useTargets();
+  const { data: marketingKpiPage } = useMarketingKpi({
+    limit: 1000,
+    offset: 0,
+  });
+  const marketingKpis = (marketingKpiPage?.items || []) as MarketingKpiEntry[];
 
   // Mutations
   const createSale = useCreateSale();
@@ -378,6 +510,12 @@ const AppContent = () => {
   const [supplierForm] = Form.useForm();
   const [branchForm] = Form.useForm();
   const [companyForm] = Form.useForm();
+
+  useEffect(() => {
+    if (isCashierOnly && activeTab !== "12") {
+      setActiveTab("12");
+    }
+  }, [isCashierOnly, activeTab]);
   const [materialForm] = Form.useForm();
   const [materialFolderForm] = Form.useForm();
   const productPhotoUrls = Form.useWatch("photoUrls", productForm);
@@ -443,6 +581,7 @@ const AppContent = () => {
       ...x,
       isExpense: false,
       date: x.createdAt,
+      reason: stripPayoutReasonPrefix(x.reason),
     }));
     const e: Payout[] = (expenses || [])
       .filter((x) => x.category === "Аванс" || x.category === "Штраф")
@@ -511,6 +650,7 @@ const AppContent = () => {
     companyForm.setFieldsValue({
       companyName: appSettings.companyName,
       companyLogoUrl: appSettings.companyLogoUrl,
+      manualPaymentTypes: appSettings.manualPaymentTypes || [],
     });
   }, [appSettings, companyForm, activeTab]);
 
@@ -699,14 +839,24 @@ const AppContent = () => {
         title: `ЗП с продажи: ${s.productName}`,
         amount: s.managerEarnings,
       }));
+    const kpiItems = marketingKpis
+      .filter((k) => match(k.managerId, k.managerName))
+      .map((k) => ({
+        key: `kpi-${k.id}`,
+        date: getKpiEffectiveDate(k),
+        type: "sale" as const,
+        title: `Авто KPI начисление (${k.month})`,
+        amount: Number(k.salaryTotal || 0),
+      }));
 
     const bonusItems = bonuses
+      .filter((b) => isSalaryPayoutReason(b.reason))
       .filter((b) => match(b.managerId, b.managerName))
       .map((b) => ({
         key: `bonus-${b.id}`,
         date: b.createdAt,
         type: "bonus" as const,
-        title: `Бонус: ${b.reason}`,
+        title: `Выплата ЗП: ${stripPayoutReasonPrefix(b.reason) || "Без комментария"}`,
         amount: b.amount,
       }));
 
@@ -724,14 +874,17 @@ const AppContent = () => {
         amount: e.amount,
       }));
 
-    const items = [...salesItems, ...bonusItems, ...advanceItems].sort(
+    const items = [...salesItems, ...kpiItems, ...bonusItems, ...advanceItems].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
 
-    const baseSalary = salesItems.reduce((sum, i) => sum + i.amount, 0);
+    const baseSalary = [...salesItems, ...kpiItems].reduce(
+      (sum, i) => sum + i.amount,
+      0,
+    );
     const bonusesTotal = bonusItems.reduce((sum, i) => sum + i.amount, 0);
     const advancesTotal = advanceItems.reduce((sum, i) => sum + i.amount, 0);
-    const total = baseSalary + bonusesTotal - advancesTotal;
+    const total = baseSalary - bonusesTotal - advancesTotal;
 
     return {
       managerName,
@@ -743,7 +896,7 @@ const AppContent = () => {
       advancesTotal,
       total,
     };
-  }, [salaryHistoryManager, managers, sales, bonuses, expenses]);
+  }, [salaryHistoryManager, managers, sales, bonuses, expenses, marketingKpis]);
 
   const employeeDetails = useMemo(() => {
     if (!employeeDetailsManager) return null;
@@ -762,10 +915,18 @@ const AppContent = () => {
       );
 
     const managerBonuses = bonuses
+      .filter((b) => isSalaryPayoutReason(b.reason))
       .filter((b) => match(b.managerId, b.managerName))
       .sort(
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+    const managerKpiRows = marketingKpis
+      .filter((k) => match(k.managerId, k.managerName))
+      .sort(
+        (a, b) =>
+          new Date(getKpiEffectiveDate(b)).getTime() -
+          new Date(getKpiEffectiveDate(a)).getTime(),
       );
 
     const managerExpenses = expenses
@@ -777,6 +938,10 @@ const AppContent = () => {
 
     const salaryFromSales = managerSales.reduce(
       (sum, s) => sum + s.managerEarnings,
+      0,
+    );
+    const salaryFromKpi = managerKpiRows.reduce(
+      (sum, k) => sum + Number(k.salaryTotal || 0),
       0,
     );
     const bonusesTotal = managerBonuses.reduce((sum, b) => sum + b.amount, 0);
@@ -802,14 +967,18 @@ const AppContent = () => {
     );
 
     const finalPayout =
-      salaryFromSales + bonusesTotal - penaltiesTotal - advancesTotal;
+      salaryFromSales +
+      salaryFromKpi -
+      bonusesTotal -
+      penaltiesTotal -
+      advancesTotal;
 
     const financeHistory = [
       ...managerBonuses.map((b) => ({
         key: `bonus-${b.id}`,
         date: b.createdAt,
         type: "bonus" as const,
-        label: b.reason,
+        label: stripPayoutReasonPrefix(b.reason) || "Без комментария",
         amount: b.amount,
       })),
       ...managerExpenses.map((e) => ({
@@ -826,6 +995,7 @@ const AppContent = () => {
       managerSales,
       financeHistory,
       salaryFromSales,
+      salaryFromKpi,
       bonusesTotal,
       penaltiesTotal,
       advancesTotal,
@@ -834,7 +1004,7 @@ const AppContent = () => {
       profitTotal,
       finalPayout,
     };
-  }, [employeeDetailsManager, sales, bonuses, expenses]);
+  }, [employeeDetailsManager, sales, bonuses, expenses, marketingKpis]);
 
   const ownerAvailableBranches = useMemo(() => {
     const names = new Set<string>([
@@ -878,6 +1048,16 @@ const AppContent = () => {
     });
   }, [sales, ownerBranchFilterSet, ownerRange]);
 
+  const ownerFilteredKpi = useMemo(() => {
+    return marketingKpis.filter((k) => {
+      if (!inOwnerRange(getKpiEffectiveDate(k))) return false;
+      if (!ownerBranchFilterSet) return true;
+      const branch =
+        k.branchName || (k.managerId ? managerBranchById.get(k.managerId) : undefined);
+      return !!branch && ownerBranchFilterSet.has(branch);
+    });
+  }, [marketingKpis, ownerBranchFilterSet, ownerRange, managerBranchById]);
+
   const ownerFilteredBonuses = useMemo(() => {
     return bonuses.filter((b) => {
       if (!inOwnerRange(b.createdAt)) return false;
@@ -889,6 +1069,15 @@ const AppContent = () => {
     });
   }, [bonuses, ownerBranchFilterSet, ownerRange, managerBranchById]);
 
+  const ownerFilteredCompanyBonuses = useMemo(
+    () => ownerFilteredBonuses.filter((b) => isCompanyBonusReason(b.reason)),
+    [ownerFilteredBonuses],
+  );
+  const ownerFilteredSalaryPayouts = useMemo(
+    () => ownerFilteredBonuses.filter((b) => isSalaryPayoutReason(b.reason)),
+    [ownerFilteredBonuses],
+  );
+
   const ownerFilteredExpenses = useMemo(() => {
     return expenses.filter((e) => {
       if (!inOwnerRange(e.createdAt)) return false;
@@ -899,6 +1088,10 @@ const AppContent = () => {
       return !!branch && ownerBranchFilterSet.has(branch);
     });
   }, [expenses, ownerBranchFilterSet, ownerRange, managerBranchById]);
+  const ownerFilteredCompanyExpenses = useMemo(
+    () => ownerFilteredExpenses.filter((e) => !isManagerLinkedExpense(e)),
+    [ownerFilteredExpenses],
+  );
 
   const ownerStats = useMemo(() => {
     const revenue = ownerFilteredSales.reduce((sum, s) => sum + s.total, 0);
@@ -911,23 +1104,34 @@ const AppContent = () => {
           (s.deliveryCost || 0)),
       0,
     );
-    const expensesTotal = ownerFilteredExpenses.reduce(
+    const expensesTotal = ownerFilteredCompanyExpenses.reduce(
       (sum, e) => sum + e.amount,
       0,
     );
-    const bonusesTotal = ownerFilteredBonuses.reduce(
+    const bonusesTotal = ownerFilteredCompanyBonuses.reduce(
       (sum, b) => sum + b.amount,
       0,
     );
-    const netProfit = salesProfit - expensesTotal - bonusesTotal;
+    const autoSalaryBonusTotal = ownerFilteredKpi.reduce(
+      (sum, k) => sum + Math.max(0, Number(k.salaryBonus || 0)),
+      0,
+    );
+    const netProfit =
+      salesProfit - expensesTotal - bonusesTotal - autoSalaryBonusTotal;
     return {
       revenue,
       expensesTotal,
       bonusesTotal,
+      autoSalaryBonusTotal,
       netProfit,
       orders: ownerFilteredSales.length,
     };
-  }, [ownerFilteredSales, ownerFilteredExpenses, ownerFilteredBonuses]);
+  }, [
+    ownerFilteredSales,
+    ownerFilteredCompanyExpenses,
+    ownerFilteredCompanyBonuses,
+    ownerFilteredKpi,
+  ]);
 
   const ownerBranchRows = useMemo(() => {
     const names =
@@ -942,12 +1146,18 @@ const AppContent = () => {
             .filter((m) => (m.branchName || "—") === name)
             .map((m) => m.id),
         );
-        const expensesTotal = ownerFilteredExpenses
+        const expensesTotal = ownerFilteredCompanyExpenses
           .filter((e) => !!e.managerId && managerIds.has(e.managerId))
           .reduce((sum, e) => sum + e.amount, 0);
-        const bonusesTotal = ownerFilteredBonuses
+        const bonusesTotal = ownerFilteredCompanyBonuses
           .filter((b) => !!b.managerId && managerIds.has(b.managerId))
           .reduce((sum, b) => sum + b.amount, 0);
+        const kpiBonusTotal = ownerFilteredKpi
+          .filter((k) => !!k.managerId && managerIds.has(k.managerId))
+          .reduce(
+            (sum, k) => sum + Math.max(0, Number(k.salaryBonus || 0)),
+            0,
+          );
         const revenue = bs.reduce((sum, s) => sum + s.total, 0);
         const profit = bs.reduce(
           (sum, s) =>
@@ -963,8 +1173,8 @@ const AppContent = () => {
           branch: name,
           orders: bs.length,
           revenue,
-          expenses: expensesTotal + bonusesTotal,
-          net: profit - expensesTotal - bonusesTotal,
+          expenses: expensesTotal + bonusesTotal + kpiBonusTotal,
+          net: profit - expensesTotal - bonusesTotal - kpiBonusTotal,
         };
       })
       .sort((a, b) => b.revenue - a.revenue);
@@ -972,8 +1182,9 @@ const AppContent = () => {
     ownerAvailableBranches,
     ownerBranchFilterSet,
     ownerFilteredSales,
-    ownerFilteredExpenses,
-    ownerFilteredBonuses,
+    ownerFilteredCompanyExpenses,
+    ownerFilteredCompanyBonuses,
+    ownerFilteredKpi,
     managers,
   ]);
 
@@ -984,11 +1195,20 @@ const AppContent = () => {
     return sourceManagers
       .map((m) => {
         const ms = ownerFilteredSales.filter((s) => s.managerId === m.id);
-        const mb = ownerFilteredBonuses.filter((b) => b.managerId === m.id);
+        const mk = ownerFilteredKpi.filter((k) => k.managerId === m.id);
+        const mb = ownerFilteredSalaryPayouts.filter((b) => b.managerId === m.id);
         const me = ownerFilteredExpenses.filter((e) => e.managerId === m.id);
         const revenue = ms.reduce((sum, s) => sum + s.total, 0);
         const salaryFromSales = ms.reduce(
           (sum, s) => sum + s.managerEarnings,
+          0,
+        );
+        const salaryFromKpi = mk.reduce(
+          (sum, k) => sum + Number(k.salaryTotal || 0),
+          0,
+        );
+        const autoBonusKpi = mk.reduce(
+          (sum, k) => sum + Math.max(0, Number(k.salaryBonus || 0)),
           0,
         );
         const bonusesTotal = mb.reduce((sum, b) => sum + b.amount, 0);
@@ -997,13 +1217,16 @@ const AppContent = () => {
           .reduce((sum, e) => sum + e.amount, 0);
         const fixed =
           m.salaryType === "fixed" ? Number(m.fixedMonthlySalary || 0) : 0;
-        const payout = fixed + salaryFromSales + bonusesTotal - deductions;
+        const accruedSalary = fixed + salaryFromSales + salaryFromKpi;
+        const payout = accruedSalary - bonusesTotal - deductions;
         return {
           key: m.id,
           manager: m.name,
           branch: m.branchName || "—",
           role: m.role,
           revenue,
+          autoBonusKpi,
+          accruedSalary,
           payout,
           orders: ms.length,
         };
@@ -1013,7 +1236,8 @@ const AppContent = () => {
     managers,
     ownerBranchFilterSet,
     ownerFilteredSales,
-    ownerFilteredBonuses,
+    ownerFilteredKpi,
+    ownerFilteredSalaryPayouts,
     ownerFilteredExpenses,
   ]);
 
@@ -1032,6 +1256,7 @@ const AppContent = () => {
     rows.push(["Выручка", String(ownerStats.revenue)]);
     rows.push(["Расходы", String(ownerStats.expensesTotal)]);
     rows.push(["Бонусы", String(ownerStats.bonusesTotal)]);
+    rows.push(["Авто KPI бонус", String(ownerStats.autoSalaryBonusTotal || 0)]);
     rows.push(["Чистая прибыль", String(ownerStats.netProfit)]);
     rows.push(["Заказы", String(ownerStats.orders)]);
     rows.push([]);
@@ -1054,6 +1279,8 @@ const AppContent = () => {
       "Роль",
       "Заказы",
       "Выручка",
+      "Авто KPI бонус",
+      "Начислено ЗП",
       "К выплате",
     ]);
     ownerManagerRows.forEach((r) => {
@@ -1063,6 +1290,8 @@ const AppContent = () => {
         r.role,
         String(r.orders),
         String(r.revenue),
+        String(r.autoBonusKpi || 0),
+        String(r.accruedSalary || 0),
         String(r.payout),
       ]);
     });
@@ -1088,7 +1317,28 @@ const AppContent = () => {
     message.success("Owner report CSV скачан");
   };
 
-  const menuItems = [
+  const menuItems = isCashierOnly
+    ? [
+        {
+          key: "12",
+          icon: <WalletOutlined />,
+          label: (
+            <p className={appTheme === "dark" ? "text-white" : "text-gray-800"}>
+              Касса
+            </p>
+          ),
+        },
+        {
+          key: "6",
+          icon: <SettingOutlined />,
+          label: (
+            <p className={appTheme === "dark" ? "text-white" : "text-gray-800"}>
+              Настройки
+            </p>
+          ),
+        },
+      ]
+    : [
     {
       key: "1",
       icon: <DashboardOutlined />,
@@ -1165,6 +1415,39 @@ const AppContent = () => {
                 className={appTheme === "dark" ? "text-white" : "text-gray-800"}
               >
                 Филиалы
+              </p>
+            ),
+          },
+          {
+            key: "13",
+            icon: <UnorderedListOutlined />,
+            label: (
+              <p
+                className={appTheme === "dark" ? "text-white" : "text-gray-800"}
+              >
+                Задачи
+              </p>
+            ),
+          },
+          {
+            key: "14",
+            icon: <DotChartOutlined />,
+            label: (
+              <p
+                className={appTheme === "dark" ? "text-white" : "text-gray-800"}
+              >
+                Маркетинг KPI
+              </p>
+            ),
+          },
+          {
+            key: "15",
+            icon: <DotChartOutlined />,
+            label: (
+              <p
+                className={appTheme === "dark" ? "text-white" : "text-gray-800"}
+              >
+                План продаж
               </p>
             ),
           },
@@ -1339,10 +1622,15 @@ const AppContent = () => {
     <Layout className="app-root min-h-screen">
       <Sider
         theme={appTheme}
+        collapsible
+        trigger={null}
+        collapsed={sidebarCollapsed}
         breakpoint="lg"
         collapsedWidth="0"
         className="h-screen sticky top-0"
-        
+        onBreakpoint={(broken) => {
+          if (broken) setSidebarCollapsed(true);
+        }}
       >
         <div
           className={`  p-5 text-center ${appTheme === "dark" ? "text-white" : "text-gray-800"} font-bold text-xl`}
@@ -1369,6 +1657,9 @@ const AppContent = () => {
               return;
             }
             setActiveTab(e.key);
+            if (window.matchMedia("(max-width: 1024px)").matches) {
+              setSidebarCollapsed(true);
+            }
           }}
           items={[
             ...menuItems,
@@ -1385,6 +1676,8 @@ const AppContent = () => {
         <AppHeader
           title={menuItems.find((i) => i.key === activeTab)?.label}
           isDark={appTheme === "dark"}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
           userName={user.name}
           onThemeChange={(dark) => setAppTheme(dark ? "dark" : "light")}
           onOpenProfile={() => {
@@ -1398,15 +1691,18 @@ const AppContent = () => {
           }`}
         >
           {activeTab === "1" && (
-            <Dashboard
-              sales={sales}
-              expenses={expenses}
-              bonuses={bonuses}
-              managers={managers}
-              branches={branches}
-              targets={targets}
-              user={user}
-            />
+            <Suspense fallback={sectionLoadingFallback}>
+              <Dashboard
+                sales={sales}
+                expenses={expenses}
+                bonuses={bonuses}
+                managers={managers}
+                branches={branches}
+                targets={targets}
+                marketingKpis={marketingKpis}
+                user={user}
+              />
+            </Suspense>
           )}
           {activeTab === "2" && (
             <div className="animate-fade-in">
@@ -1422,211 +1718,281 @@ const AppContent = () => {
                   Новый заказ
                 </Button>
               </div>
-              <SalesTable
-                data={sales}
-                managers={managers}
-                currentUser={user}
-                isAdmin={isAdmin}
-                onlyMine={salesFilters.onlyMine}
-                filterType={salesFilters.filterType}
-                filterDate={salesFilters.filterDate}
-                onOnlyMineChange={salesFilters.setOnlyMine}
-                onFilterTypeChange={salesFilters.setFilterType}
-                onFilterDateChange={salesFilters.setFilterDate}
-                onEdit={(s) => {
-                  setEditingItem(s as Sale);
-                  setSaleModal(true);
-                }}
-                onDelete={(id) => deleteSale.mutate(id)}
-                onStatusChange={(id, status) =>
-                  updateSale.mutate({ id, data: { deliveryStatus: status } })
-                }
-                formatDate={formatDate}
-                deliveryStatuses={DELIVERY_STATUSES}
-              />
+              <Suspense fallback={sectionLoadingFallback}>
+                <SalesTable
+                  data={sales}
+                  managers={managers}
+                  currentUser={user}
+                  isAdmin={isAdmin}
+                  onlyMine={salesFilters.onlyMine}
+                  filterType={salesFilters.filterType}
+                  filterDate={salesFilters.filterDate}
+                  onOnlyMineChange={salesFilters.setOnlyMine}
+                  onFilterTypeChange={salesFilters.setFilterType}
+                  onFilterDateChange={salesFilters.setFilterDate}
+                  onEdit={(s) => {
+                    setEditingItem(s as Sale);
+                    setSaleModal(true);
+                  }}
+                  onDelete={(id) => deleteSale.mutate(id)}
+                  onStatusChange={(id, status) =>
+                    updateSale.mutate({ id, data: { deliveryStatus: status } })
+                  }
+                  formatDate={formatDate}
+                  deliveryStatuses={DELIVERY_STATUSES}
+                />
+              </Suspense>
             </div>
           )}
           {activeTab === "3" && canAccessWarehouse && (
-            <WarehousePanel
-              user={user}
-              canManageProducts={canStorekeeperManageProducts}
-              branchName={isAdmin ? undefined : user.branchName}
-              importLoading={importProducts.isPending}
-              onCreateProduct={() => {
-                setEditingItem(null);
-                setProductModal(true);
-              }}
-              onEditProduct={(p) => {
-                setEditingItem(p as Product);
-                setProductModal(true);
-              }}
-              onImportProducts={(file) =>
-                importProducts.mutate({
-                  file,
-                  branchName: isAdmin ? undefined : user.branchName,
-                })
-              }
-            />
+            <Suspense fallback={sectionLoadingFallback}>
+              <WarehousePanel
+                user={user}
+                canManageProducts={canStorekeeperManageProducts}
+                branchName={isAdmin ? undefined : user.branchName}
+                importLoading={importProducts.isPending}
+                onCreateProduct={() => {
+                  setEditingItem(null);
+                  setProductModal(true);
+                }}
+                onEditProduct={(p) => {
+                  setEditingItem(p as Product);
+                  setProductModal(true);
+                }}
+                onImportProducts={(file) =>
+                  importProducts.mutate({
+                    file,
+                    branchName: isAdmin ? undefined : user.branchName,
+                  })
+                }
+              />
+            </Suspense>
           )}
           {activeTab === "7" && isAdmin && (
-            <SuppliersSection
-              suppliers={suppliers}
-              isDark={appTheme === "dark"}
-              formatPhone={formatPhone}
-              onAdd={() => {
-                setEditingItem(null);
-                setSupplierModal(true);
-              }}
-              onEdit={(supplier) => {
-                setEditingItem(supplier as Supplier);
-                setSupplierModal(true);
-              }}
-              onDelete={(id) => deleteSupplier.mutate(id)}
-            />
+            <Suspense fallback={sectionLoadingFallback}>
+              <SuppliersSection
+                suppliers={suppliers}
+                isDark={appTheme === "dark"}
+                formatPhone={formatPhone}
+                onAdd={() => {
+                  setEditingItem(null);
+                  setSupplierModal(true);
+                }}
+                onEdit={(supplier) => {
+                  setEditingItem(supplier as Supplier);
+                  setSupplierModal(true);
+                }}
+                onDelete={(id) => deleteSupplier.mutate(id)}
+              />
+            </Suspense>
           )}
           {activeTab === "8" && isAdmin && (
-            <BranchesSection
-              branches={branches}
-              formatDate={formatDate}
-              onAdd={() => setBranchModal(true)}
-              onOpenDetails={(branch) => setBranchDetails(branch as Branch)}
-              onDelete={(id) => deleteBranch.mutate(id)}
-            />
+            <Suspense fallback={sectionLoadingFallback}>
+              <BranchesSection
+                branches={branches}
+                formatDate={formatDate}
+                onAdd={() => setBranchModal(true)}
+                onOpenDetails={(branch) => setBranchDetails(branch as Branch)}
+                onDelete={(id) => deleteBranch.mutate(id)}
+              />
+            </Suspense>
           )}
           {activeTab === "4" && isAdmin && (
-            <ManagersSection
-              managers={managers}
-              deletedManagers={deletedManagers}
-              canManagePrivileged={isSuperAdmin}
-              onShowDetails={(manager) =>
-                setEmployeeDetailsManager(manager as Manager)
-              }
-              onEdit={(manager) => {
-                setEditingItem(manager as Manager);
-                setManagerModal(true);
-              }}
-              onDelete={(id) => deleteManager.mutate(id)}
-              onAdd={() => {
-                setEditingItem(null);
-                setManagerModal(true);
-              }}
-              onRestore={(id) => restoreManager.mutate(id)}
-              formatPhone={formatPhone}
-              formatBirthDate={formatBirthDate}
-              formatDate={formatDate}
-            />
+            <Suspense fallback={sectionLoadingFallback}>
+              <ManagersSection
+                managers={managers}
+                deletedManagers={deletedManagers}
+                canManagePrivileged={isSuperAdmin}
+                onShowDetails={(manager) =>
+                  setEmployeeDetailsManager(manager as Manager)
+                }
+                onEdit={(manager) => {
+                  setEditingItem(manager as Manager);
+                  setManagerModal(true);
+                }}
+                onDelete={(id) => deleteManager.mutate(id)}
+                onAdd={() => {
+                  setEditingItem(null);
+                  setManagerModal(true);
+                }}
+                onRestore={(id) => restoreManager.mutate(id)}
+                formatPhone={formatPhone}
+                formatBirthDate={formatBirthDate}
+                formatDate={formatDate}
+              />
+            </Suspense>
           )}
           {activeTab === "5" && isAdmin && (
-            <FinanceSection
-              sales={sales}
-              expenses={expenses}
-              bonuses={bonuses}
-              targets={targets}
-              managers={managers}
-              combinedPayouts={combinedPayouts}
-              onOpenExpense={() => setExpenseModal(true)}
-              onOpenFinance={() => setFinanceModal(true)}
-              onOpenTarget={() => setTargetModal(true)}
-              onDeleteTarget={(id) => deleteTarget.mutate(id)}
-              onIssueTargetReward={(target) =>
-                issueTargetReward.mutate({
-                  id: target.id,
-                  approvedBy: user.name,
-                })
-              }
-              issuingTargetReward={issueTargetReward.isPending}
-              canApproveTargetReward={isAdmin}
-              onOpenSalaryHistory={(payload) =>
-                setSalaryHistoryManager(payload)
-              }
-              formatDate={formatDate}
-            />
+            <Suspense fallback={sectionLoadingFallback}>
+              <FinanceSection
+                sales={sales}
+                expenses={expenses}
+                bonuses={bonuses}
+                targets={targets}
+                managers={managers}
+                marketingKpis={marketingKpis}
+                combinedPayouts={combinedPayouts}
+                onOpenExpense={() => setExpenseModal(true)}
+                onOpenFinance={() => setFinanceModal(true)}
+                onOpenTarget={() => setTargetModal(true)}
+                onDeleteTarget={(id) => deleteTarget.mutate(id)}
+                onIssueTargetReward={(target) =>
+                  issueTargetReward.mutate({
+                    id: target.id,
+                    approvedBy: user.name,
+                  })
+                }
+                issuingTargetReward={issueTargetReward.isPending}
+                canApproveTargetReward={isAdmin}
+                onOpenSalaryHistory={(payload) =>
+                  setSalaryHistoryManager(payload)
+                }
+                formatDate={formatDate}
+                canUploadSalesReport={isAdmin || isSuperAdmin}
+              />
+            </Suspense>
           )}
           {activeTab === "9" && (
             <div className="animate-fade-in">
-              <MaterialsPanel
-                materialsPage={materialsPageData}
-                folders={materialFolders}
-                selectedFolderId={materialsFolderId}
-                search={materialsSearch}
-                isAdmin={isAdmin}
-                onSearchChange={setMaterialsSearch}
-                onSelectFolder={setMaterialsFolderId}
-                onCreateFolder={() => {
-                  materialFolderForm.resetFields();
-                  materialFolderForm.setFieldsValue({
-                    sortOrder: materialFolders.length + 1,
-                  });
-                  setMaterialFolderModal(true);
-                }}
-                onCreate={() => {
-                  setEditingItem(null);
-                  materialForm.resetFields();
-                  materialForm.setFieldsValue({
-                    type: "document",
-                    isPublished: true,
-                    folderId: materialsFolderId,
-                    lessonOrder: 1,
-                  });
-                  setMaterialModal(true);
-                }}
-                onEdit={(m) => {
-                  setEditingItem(m);
-                  materialForm.setFieldsValue(m);
-                  setMaterialModal(true);
-                }}
-                onPreviewVideo={(m) => setPreviewMaterial(m)}
-                onDeleteFolder={(id) => deleteMaterialFolder.mutate(id)}
-                onPageChange={onMaterialsPageChange}
-                onDelete={(id) => deleteMaterial.mutate(id)}
-                formatDate={formatDate}
-              />
+              <Suspense fallback={sectionLoadingFallback}>
+                <MaterialsPanel
+                  materialsPage={materialsPageData}
+                  folders={materialFolders}
+                  selectedFolderId={materialsFolderId}
+                  search={materialsSearch}
+                  isAdmin={isAdmin}
+                  onSearchChange={setMaterialsSearch}
+                  onSelectFolder={setMaterialsFolderId}
+                  onCreateFolder={() => {
+                    materialFolderForm.resetFields();
+                    materialFolderForm.setFieldsValue({
+                      sortOrder: materialFolders.length + 1,
+                    });
+                    setMaterialFolderModal(true);
+                  }}
+                  onCreate={() => {
+                    setEditingItem(null);
+                    materialForm.resetFields();
+                    materialForm.setFieldsValue({
+                      type: "document",
+                      isPublished: true,
+                      folderId: materialsFolderId,
+                      lessonOrder: 1,
+                    });
+                    setMaterialModal(true);
+                  }}
+                  onEdit={(m) => {
+                    setEditingItem(m);
+                    materialForm.setFieldsValue(m);
+                    setMaterialModal(true);
+                  }}
+                  onPreviewVideo={(m) => setPreviewMaterial(m)}
+                  onDeleteFolder={(id) => deleteMaterialFolder.mutate(id)}
+                  onPageChange={onMaterialsPageChange}
+                  onDelete={(id) => deleteMaterial.mutate(id)}
+                  formatDate={formatDate}
+                  aiAudience={
+                    user.role === "manager"
+                      ? "manager"
+                      : user.role === "admin" || user.role === "superadmin"
+                        ? "marketing"
+                        : "general"
+                  }
+                />
+              </Suspense>
             </div>
           )}
           {activeTab === "10" && isSuperAdmin && (
-            <OwnerReportSection
-              ownerAvailableBranches={ownerAvailableBranches}
-              ownerSelectedBranches={ownerSelectedBranches}
-              ownerRange={ownerRange}
-              ownerStats={ownerStats}
-              ownerBranchRows={ownerBranchRows}
-              ownerManagerRows={ownerManagerRows}
-              onOwnerBranchesChange={setOwnerSelectedBranches}
-              onOwnerRangeChange={setOwnerRange}
-              onExportCsv={downloadOwnerCsv}
-            />
+            <Suspense fallback={sectionLoadingFallback}>
+              <OwnerReportSection
+                ownerAvailableBranches={ownerAvailableBranches}
+                ownerSelectedBranches={ownerSelectedBranches}
+                ownerRange={ownerRange}
+                ownerStats={ownerStats}
+                ownerBranchRows={ownerBranchRows}
+                ownerManagerRows={ownerManagerRows}
+                onOwnerBranchesChange={setOwnerSelectedBranches}
+                onOwnerRangeChange={setOwnerRange}
+                onExportCsv={downloadOwnerCsv}
+              />
+            </Suspense>
           )}
           {activeTab === "11" && (
-            <RepairsSection
-              currentUserName={user.name}
-              branches={branches}
-              products={products}
-              formatDate={formatDate}
-            />
+            <Suspense fallback={sectionLoadingFallback}>
+              <RepairsSection
+                currentUserName={user.name}
+                branches={branches}
+                products={products}
+                formatDate={formatDate}
+              />
+            </Suspense>
+          )}
+          {activeTab === "13" && isAdmin && (
+            <Suspense fallback={sectionLoadingFallback}>
+              <TasksSection
+                managers={managers}
+                currentUser={{ id: user.id, name: user.name }}
+                formatDate={formatDate}
+              />
+            </Suspense>
+          )}
+          {activeTab === "14" && isAdmin && (
+            <Suspense fallback={sectionLoadingFallback}>
+              <MarketingKpiSection managers={managers} formatDate={formatDate} />
+            </Suspense>
+          )}
+          {activeTab === "15" && isAdmin && (
+            <Suspense fallback={sectionLoadingFallback}>
+              <SalesPlanSection
+                sales={sales}
+                targets={targets}
+                managers={managers}
+                branches={branches}
+                user={user}
+                formatDate={formatDate}
+              />
+            </Suspense>
+          )}
+          {activeTab === "12" && (
+            <Suspense fallback={sectionLoadingFallback}>
+              <CashierModeSection
+                products={products}
+                sales={sales}
+                branches={branches}
+                currentUser={user}
+                isAdmin={isAdmin}
+                manualPaymentTypes={appSettings?.manualPaymentTypes || []}
+                getAvailableStock={getAvailableStock}
+                submitting={createSale.isPending}
+                onCreateSale={(payload) => createSale.mutateAsync(payload)}
+              />
+            </Suspense>
           )}
           {activeTab === "6" && (
-            <SettingsSection
-              user={{
-                id: user.id,
-                name: user.name,
-                role: user.role,
-              }}
-              sales={sales}
-              isAdmin={isAdmin}
-              appTheme={appTheme}
-              uiMode={uiMode}
-              companyForm={companyForm}
-              isUploadingCompanyLogo={isUploadingCompanyLogo}
-              profileSubmitting={updateProfile.isPending}
-              companySubmitting={updateAppSettings.isPending}
-              onProfileSubmit={(v) => updateProfile.mutate(v)}
-              onCompanySubmit={(v) => updateAppSettings.mutate(v)}
-              onThemeChange={(dark) => setAppTheme(dark ? "dark" : "light")}
-              onUiModeChange={setUiMode}
-              onUploadCompanyLogo={uploadCompanyLogo}
-              formatDate={formatDate}
-              deliveryStatuses={DELIVERY_STATUSES}
-            />
+            <Suspense fallback={sectionLoadingFallback}>
+              <SettingsSection
+                user={{
+                  id: user.id,
+                  name: user.name,
+                  role: user.role,
+                }}
+                sales={sales}
+                isAdmin={isAdmin}
+                appTheme={appTheme}
+                uiMode={uiMode}
+                companyForm={companyForm}
+                isUploadingCompanyLogo={isUploadingCompanyLogo}
+                profileSubmitting={updateProfile.isPending}
+                companySubmitting={updateAppSettings.isPending}
+                onProfileSubmit={(v) => updateProfile.mutate(v)}
+                onCompanySubmit={(v) => updateAppSettings.mutate(v)}
+                onThemeChange={(dark) => setAppTheme(dark ? "dark" : "light")}
+                onUiModeChange={setUiMode}
+                onUploadCompanyLogo={uploadCompanyLogo}
+                formatDate={formatDate}
+                deliveryStatuses={DELIVERY_STATUSES}
+              />
+            </Suspense>
           )}
         </Content>
       </Layout>
@@ -1647,6 +2013,7 @@ const AppContent = () => {
           isAdmin={isAdmin}
           currentUser={user}
           isDark={appTheme === "dark"}
+          manualPaymentTypes={appSettings?.manualPaymentTypes || []}
           getAvailableStock={getAvailableStock}
           onSubmit={(vals) => {
             if (editingItem)
@@ -1687,20 +2054,28 @@ const AppContent = () => {
         onCancel={() => setFinanceModal(false)}
         onSubmit={(v) => {
           const maxPayable = managerPayoutMeta[v.managerId]?.maxPayable ?? 0;
-          if (Number(v.amount || 0) > maxPayable) {
+          const requiresManagerLimit =
+            v.type === "salary" || v.type === "advance";
+          if (requiresManagerLimit && Number(v.amount || 0) > maxPayable) {
             message.error(
               `Максимально доступно: ${maxPayable.toLocaleString()} c`,
             );
             return;
           }
           const isAdvance = v.type === "advance";
+          const cleanReason = String(v.reason || "").trim();
+          const reason = isAdvance
+            ? cleanReason
+            : v.type === "bonus"
+              ? `${BONUS_REASON_PREFIX}${cleanReason || "Бонус от компании"}`
+              : `${SALARY_REASON_PREFIX}${cleanReason || "Выплата ЗП"}`;
           createTransaction.mutate(
             {
               type: isAdvance ? "expense" : "bonus",
               payload: {
                 amount: v.amount,
                 managerId: v.managerId,
-                reason: v.reason,
+                reason,
                 category: isAdvance ? "Аванс" : undefined,
               },
             },
@@ -1848,6 +2223,8 @@ const AppContent = () => {
           setEditingItem(null);
         }}
         onSubmit={(v) => {
+          const periodStart = v.period?.[0];
+          const periodEnd = v.period?.[1];
           createTarget.mutate({
             ...v,
             rewardType: v.rewardType || "money",
@@ -1857,7 +2234,8 @@ const AppContent = () => {
               (v.rewardType || "money") === "material"
                 ? String(v.rewardText || "").trim()
                 : undefined,
-            deadline: v.deadline ? dayjs(v.deadline).toISOString() : undefined,
+            startDate: periodStart ? dayjs(periodStart).startOf("day").toISOString() : undefined,
+            deadline: periodEnd ? dayjs(periodEnd).endOf("day").toISOString() : undefined,
           });
           setTargetModal(false);
           setEditingItem(null);

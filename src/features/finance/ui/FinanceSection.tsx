@@ -1,13 +1,38 @@
-import { Avatar, Button, Card, Col, Popconfirm, Progress, Row, Statistic, Table, Tabs, Tag } from "antd";
+import { useMemo, useState } from "react";
+import {
+  Avatar,
+  Button,
+  Card,
+  Col,
+  DatePicker,
+  Input,
+  Popconfirm,
+  Progress,
+  Row,
+  Select,
+  Space,
+  Statistic,
+  Table,
+  Tabs,
+  Tag,
+  Typography,
+  message,
+} from "antd";
 import { DeleteOutlined, PlusOutlined, UserOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
+import type { Dayjs } from "dayjs";
+
+const { RangePicker } = DatePicker;
 
 type SaleLike = {
   id: string;
   createdAt: string;
   manualDate?: string | null;
   total: number;
+  quantity?: number;
+  paymentType?: string;
+  branch?: string;
   productName: string;
   managerId?: string;
   managerName: string;
@@ -49,6 +74,7 @@ type TargetLike = {
   reward: number;
   rewardType?: "money" | "material";
   rewardText?: string | null;
+  startDate?: string;
   deadline?: string;
   rewardIssued?: boolean;
   rewardIssuedAt?: string | null;
@@ -60,12 +86,24 @@ type ManagerLike = {
   name: string;
 };
 
+type MarketingKpiLike = {
+  id: string;
+  managerId: string;
+  managerName: string;
+  month: string;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  salaryBonus: number;
+  salaryTotal: number;
+};
+
 type Props = {
   sales: SaleLike[];
   expenses: ExpenseLike[];
   bonuses: BonusLike[];
   targets: TargetLike[];
   managers: ManagerLike[];
+  marketingKpis?: MarketingKpiLike[];
   combinedPayouts: PayoutLike[];
   onOpenExpense: () => void;
   onOpenFinance: () => void;
@@ -76,6 +114,7 @@ type Props = {
   canApproveTargetReward?: boolean;
   onOpenSalaryHistory: (payload: { id?: string; name?: string }) => void;
   formatDate: (value?: string | null, withTime?: boolean) => string;
+  canUploadSalesReport?: boolean;
 };
 
 export const FinanceSection = ({
@@ -84,6 +123,7 @@ export const FinanceSection = ({
   bonuses,
   targets,
   managers,
+  marketingKpis = [],
   combinedPayouts,
   onOpenExpense,
   onOpenFinance,
@@ -94,9 +134,200 @@ export const FinanceSection = ({
   canApproveTargetReward,
   onOpenSalaryHistory,
   formatDate,
+  canUploadSalesReport,
 }: Props) => {
+  const [reportRange, setReportRange] = useState<[Dayjs, Dayjs]>([
+    dayjs().startOf("month"),
+    dayjs().endOf("day"),
+  ]);
+  const [reportBranch, setReportBranch] = useState<string>("all");
+  const [reportManager, setReportManager] = useState<string>("all");
+  const [reportPayment, setReportPayment] = useState<string>("all");
+  const [reportSearch, setReportSearch] = useState("");
+
+  const reportBranches = useMemo(() => {
+    const values = new Set<string>();
+    sales.forEach((s) => {
+      const branch = String(s.branch || "").trim();
+      if (branch) values.add(branch);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b, "ru"));
+  }, [sales]);
+
+  const reportManagers = useMemo(() => {
+    const values = new Set<string>();
+    sales.forEach((s) => {
+      const manager = String(s.managerName || "").trim();
+      if (manager) values.add(manager);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b, "ru"));
+  }, [sales]);
+
+  const reportPaymentTypes = useMemo(() => {
+    const values = new Set<string>();
+    sales.forEach((s) => {
+      const paymentType = String(s.paymentType || "").trim();
+      if (paymentType) values.add(paymentType);
+    });
+    return Array.from(values).sort((a, b) => a.localeCompare(b, "ru"));
+  }, [sales]);
+
+  const filteredReportSales = useMemo(() => {
+    const [from, to] = reportRange;
+    const q = reportSearch.trim().toLowerCase();
+    return sales.filter((s) => {
+      const date = dayjs(s.manualDate || s.createdAt);
+      const inRange =
+        date.isAfter(from.startOf("day")) && date.isBefore(to.endOf("day"));
+      if (!inRange) return false;
+      if (reportBranch !== "all" && (s.branch || "") !== reportBranch) return false;
+      if (reportManager !== "all" && (s.managerName || "") !== reportManager) return false;
+      if (reportPayment !== "all" && (s.paymentType || "") !== reportPayment) return false;
+      if (!q) return true;
+      const source = `${s.productName} ${s.clientName} ${s.managerName} ${s.branch || ""}`.toLowerCase();
+      return source.includes(q);
+    });
+  }, [sales, reportRange, reportBranch, reportManager, reportPayment, reportSearch]);
+
+  const reportSummary = useMemo(() => {
+    const totalRevenue = filteredReportSales.reduce((sum, s) => sum + Number(s.total || 0), 0);
+    const totalQty = filteredReportSales.reduce((sum, s) => sum + Number(s.quantity || 1), 0);
+    const returns = filteredReportSales.filter((s) => Number(s.total || 0) < 0).length;
+    const managerByName = new Map(
+      managers.map((m) => [String(m.name || "").trim(), m.id]),
+    );
+    const from = reportRange[0].startOf("day");
+    const to = reportRange[1].endOf("day");
+    const isInRange = (value: Dayjs) =>
+      value.isSame(from, "day") ||
+      value.isSame(to, "day") ||
+      (value.isAfter(from, "day") && value.isBefore(to, "day"));
+    const kpiSalaryAccrued = marketingKpis.reduce((sum, k) => {
+      const effectiveDate = dayjs(k.periodEnd || k.periodStart || `${k.month}-01`).endOf("day");
+      if (!isInRange(effectiveDate)) return sum;
+      if (reportManager !== "all") {
+        const managerIdByName = managerByName.get(reportManager);
+        if (k.managerId !== managerIdByName && k.managerName !== reportManager) return sum;
+      }
+      return sum + Number(k.salaryTotal || 0);
+    }, 0);
+    const kpiAutoBonuses = marketingKpis.reduce((sum, k) => {
+      const effectiveDate = dayjs(k.periodEnd || k.periodStart || `${k.month}-01`).endOf("day");
+      if (!isInRange(effectiveDate)) return sum;
+      if (reportManager !== "all") {
+        const managerIdByName = managerByName.get(reportManager);
+        if (k.managerId !== managerIdByName && k.managerName !== reportManager) return sum;
+      }
+      return sum + Math.max(0, Number(k.salaryBonus || 0));
+    }, 0);
+    return {
+      totalRevenue,
+      totalQty,
+      totalOrders: filteredReportSales.length,
+      returns,
+      kpiSalaryAccrued,
+      kpiAutoBonuses,
+    };
+  }, [filteredReportSales, marketingKpis, reportManager, managers, reportRange]);
+
+  const escapeCsvCell = (value: unknown) => {
+    const text = String(value ?? "");
+    if (text.includes('"') || text.includes(",") || text.includes("\n")) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  };
+
+  const downloadCsv = (filename: string, rows: string[][]) => {
+    const csv = rows.map((row) => row.map(escapeCsvCell).join(",")).join("\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportSalesRowsCsv = () => {
+    if (!filteredReportSales.length) {
+      message.warning("Нет данных по выбранным фильтрам");
+      return;
+    }
+    const rows: string[][] = [
+      ["date", "productName", "managerName", "clientName", "quantity", "total", "branch", "paymentType"],
+      ...filteredReportSales.map((s) => [
+        formatDate(s.manualDate || s.createdAt, true),
+        s.productName,
+        s.managerName,
+        s.clientName,
+        String(Number(s.quantity || 1)),
+        String(Number(s.total || 0)),
+        String(s.branch || ""),
+        String(s.paymentType || ""),
+      ]),
+    ];
+    downloadCsv(
+      `sales-report-${reportRange[0].format("YYYYMMDD")}-${reportRange[1].format("YYYYMMDD")}.csv`,
+      rows,
+    );
+    message.success("Отчет продаж выгружен");
+  };
+
+  const exportSalesSummaryCsv = () => {
+    if (!filteredReportSales.length) {
+      message.warning("Нет данных по выбранным фильтрам");
+      return;
+    }
+    const byManager = new Map<string, { orders: number; qty: number; revenue: number }>();
+    filteredReportSales.forEach((s) => {
+      const name = s.managerName || "Не указан";
+      const cur = byManager.get(name) || { orders: 0, qty: 0, revenue: 0 };
+      cur.orders += 1;
+      cur.qty += Number(s.quantity || 1);
+      cur.revenue += Number(s.total || 0);
+      byManager.set(name, cur);
+    });
+    const from = reportRange[0].startOf("day");
+    const to = reportRange[1].endOf("day");
+    const isInRange = (value: Dayjs) =>
+      value.isSame(from, "day") ||
+      value.isSame(to, "day") ||
+      (value.isAfter(from, "day") && value.isBefore(to, "day"));
+    marketingKpis.forEach((k) => {
+      const effectiveDate = dayjs(k.periodEnd || k.periodStart || `${k.month}-01`).endOf("day");
+      if (!isInRange(effectiveDate)) return;
+      const name = k.managerName || "Не указан";
+      const cur = byManager.get(name) || { orders: 0, qty: 0, revenue: 0 };
+      cur.revenue += Number(k.salaryTotal || 0);
+      byManager.set(name, cur);
+    });
+    const rows: string[][] = [
+      ["managerName", "orders", "quantity", "revenue"],
+      ...Array.from(byManager.entries())
+        .sort((a, b) => b[1].revenue - a[1].revenue)
+        .map(([manager, v]) => [
+          manager,
+          String(v.orders),
+          String(v.qty),
+          String(v.revenue),
+        ]),
+    ];
+    downloadCsv(
+      `sales-summary-${reportRange[0].format("YYYYMMDD")}-${reportRange[1].format("YYYYMMDD")}.csv`,
+      rows,
+    );
+    message.success("Сводный отчет выгружен");
+  };
+
   const totalIncome = sales.reduce((a, s) => a + s.total, 0);
-  const totalExpenses = expenses.reduce((a, e) => a + e.amount, 0);
+  const isManagerLinkedExpense = (expense: ExpenseLike) =>
+    Boolean(expense.managerName);
+  const totalExpenses = expenses
+    .filter((e) => !isManagerLinkedExpense(e))
+    .reduce((a, e) => a + e.amount, 0);
   const totalBonuses = bonuses.reduce((a, b) => a + b.amount, 0);
   const totalExpensesIncludingBonuses = totalExpenses + totalBonuses;
   const totalSalariesPaid = expenses
@@ -107,7 +338,7 @@ export const FinanceSection = ({
   type Movement = {
     key: string;
     date: string;
-    type: "income" | "expense" | "bonus";
+    type: "income" | "expense" | "bonus" | "refund";
     label: string;
     sub: string;
     amount: number;
@@ -116,15 +347,16 @@ export const FinanceSection = ({
     income: "finance-movement-row finance-movement-row--income",
     bonus: "finance-movement-row finance-movement-row--bonus",
     expense: "finance-movement-row finance-movement-row--expense",
+    refund: "finance-movement-row finance-movement-row--expense",
   };
   const allMovements: Movement[] = [
     ...sales.map((s) => ({
       key: `s-${s.id}`,
       date: s.manualDate || s.createdAt,
-      type: "income" as const,
-      label: `Продажа: ${s.productName}`,
+      type: s.total >= 0 ? ("income" as const) : ("refund" as const),
+      label: s.total >= 0 ? `Продажа: ${s.productName}` : `Возврат: ${s.productName}`,
       sub: `${s.managerName} · ${s.clientName}`,
-      amount: s.total,
+      amount: Math.abs(s.total),
     })),
     ...expenses.map((e) => ({
       key: `e-${e.id}`,
@@ -157,7 +389,13 @@ export const FinanceSection = ({
       width: 100,
       render: (t) => (
         <Tag color={t === "income" ? "green" : t === "bonus" ? "orange" : "red"}>
-          {t === "income" ? "Приход" : t === "bonus" ? "Выплата" : "Расход"}
+          {t === "income"
+            ? "Приход"
+            : t === "bonus"
+              ? "Выплата"
+              : t === "refund"
+                ? "Возврат"
+                : "Расход"}
         </Tag>
       ),
     },
@@ -165,14 +403,14 @@ export const FinanceSection = ({
     {
       title: "Детали",
       dataIndex: "sub",
-      render: (v) => <span className="text-gray-400 text-xs">{v}</span>,
+      render: (v) => <span className="text-slate-500 dark:text-slate-300 text-xs">{v}</span>,
     },
     {
       title: "Сумма",
       dataIndex: "amount",
       align: "right",
       render: (v, r) => (
-        <span className={`font-bold ${r.type === "income" ? "text-green-600" : "text-red-500"}`}>
+        <span className={`font-bold ${r.type === "income" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
           {r.type === "income" ? "+" : "-"}
           {v.toLocaleString()} c
         </span>
@@ -221,7 +459,7 @@ export const FinanceSection = ({
                 columns={movementColumns}
                 rowKey="key"
                 size="small"
-                pagination={{ pageSize: 15 }}
+                pagination={{ pageSize: 10 }}
                 scroll={{ x: 700 }}
                 rowClassName={(r) => movementRowClassByType[r.type]}
               />
@@ -244,7 +482,7 @@ export const FinanceSection = ({
                   )}
                   rowKey="id"
                   size="small"
-                  pagination={{ pageSize: 12 }}
+                  pagination={{ pageSize: 10 }}
                   scroll={{ x: 760 }}
                   columns={[
                     {
@@ -268,7 +506,7 @@ export const FinanceSection = ({
                       title: "Сумма",
                       dataIndex: "amount",
                       align: "right",
-                      render: (v) => <span className="text-red-500 font-bold">-{v.toLocaleString()} c</span>,
+                      render: (v) => <span className="text-rose-600 dark:text-rose-400 font-bold">-{v.toLocaleString()} c</span>,
                     },
                   ]}
                 />
@@ -289,7 +527,7 @@ export const FinanceSection = ({
                   rowKey="id"
                   size="small"
                   dataSource={combinedPayouts}
-                  pagination={{ pageSize: 12 }}
+                  pagination={{ pageSize: 10 }}
                   columns={[
                     {
                       title: "Сотрудник",
@@ -314,8 +552,8 @@ export const FinanceSection = ({
                     {
                       title: "Тип",
                       render: (_v, item) => (
-                        <Tag color={item.isExpense ? "orange" : "green"}>
-                          {item.isExpense ? "Аванс/Штраф" : "Бонус/ЗП"}
+                        <Tag color={item.isExpense ? "orange" : "blue"}>
+                          {item.isExpense ? "Аванс/Штраф" : "ЗП/Бонус (выплата)"}
                         </Tag>
                       ),
                     },
@@ -329,8 +567,8 @@ export const FinanceSection = ({
                       title: "Сумма",
                       align: "right",
                       render: (_v, item) => (
-                        <div className={`font-bold text-lg ${item.isExpense ? "text-orange-500" : "text-green-600"}`}>
-                          {item.isExpense ? "-" : "+"}
+                        <div className="font-bold text-lg text-rose-600 dark:text-rose-400">
+                          -
                           {item.amount.toLocaleString()} c
                         </div>
                       ),
@@ -375,8 +613,11 @@ export const FinanceSection = ({
                             {t.amount.toLocaleString()} c
                             {managerName && <span className="ml-2">{managerName}</span>}
                             {t.deadline && (
-                              <span className="text-xs text-gray-400 ml-2">
-                                до {formatDate(t.deadline)} ·{" "}
+                              <span className="text-xs text-slate-500 dark:text-slate-300 ml-2">
+                                {t.startDate
+                                  ? `с ${formatDate(t.startDate)} до ${formatDate(t.deadline)}`
+                                  : `до ${formatDate(t.deadline)}`}{" "}
+                                ·{" "}
                                 {daysLeft !== null && daysLeft >= 0
                                   ? `осталось ${daysLeft} дн`
                                   : `просрочено на ${Math.abs(daysLeft ?? 0)} дн`}
@@ -482,6 +723,183 @@ export const FinanceSection = ({
               </div>
             ),
           },
+          ...(canUploadSalesReport
+            ? [
+                {
+                  key: "sales-upload-analysis",
+                  label: "Выгрузка отчета продаж",
+                  children: (
+                    <div className="space-y-4">
+                      <Card
+                        size="small"
+                        title="Экспорт отчета продаж"
+                        extra={
+                          <Space>
+                            <Button type="primary" onClick={exportSalesRowsCsv}>
+                              Детальный CSV
+                            </Button>
+                            <Button onClick={exportSalesSummaryCsv}>
+                              Сводка CSV
+                            </Button>
+                          </Space>
+                        }
+                      >
+                        <Row gutter={[8, 8]}>
+                          <Col xs={24} md={10}>
+                            <RangePicker
+                              className="w-full"
+                              value={reportRange}
+                              onChange={(value) => {
+                                if (value?.[0] && value?.[1]) {
+                                  setReportRange([value[0], value[1]]);
+                                }
+                              }}
+                              allowClear={false}
+                            />
+                          </Col>
+                          <Col xs={24} md={5}>
+                            <Select
+                              className="w-full"
+                              value={reportBranch}
+                              onChange={setReportBranch}
+                              options={[
+                                { value: "all", label: "Все филиалы" },
+                                ...reportBranches.map((b) => ({ value: b, label: b })),
+                              ]}
+                            />
+                          </Col>
+                          <Col xs={24} md={5}>
+                            <Select
+                              className="w-full"
+                              value={reportManager}
+                              onChange={setReportManager}
+                              options={[
+                                { value: "all", label: "Все менеджеры" },
+                                ...reportManagers.map((m) => ({ value: m, label: m })),
+                              ]}
+                            />
+                          </Col>
+                          <Col xs={24} md={4}>
+                            <Select
+                              className="w-full"
+                              value={reportPayment}
+                              onChange={setReportPayment}
+                              options={[
+                                { value: "all", label: "Все оплаты" },
+                                ...reportPaymentTypes.map((p) => ({ value: p, label: p })),
+                              ]}
+                            />
+                          </Col>
+                          <Col xs={24}>
+                            <Input
+                              value={reportSearch}
+                              onChange={(e) => setReportSearch(e.target.value)}
+                              placeholder="Поиск: товар, клиент, менеджер"
+                              allowClear
+                            />
+                          </Col>
+                        </Row>
+                      </Card>
+
+                      <Row gutter={[12, 12]}>
+                        <Col xs={12} sm={6}>
+                          <Card size="small">
+                            <Statistic title="Заказов" value={reportSummary.totalOrders} />
+                          </Card>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <Card size="small">
+                            <Statistic title="Возвраты" value={reportSummary.returns} />
+                          </Card>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <Card size="small">
+                            <Statistic title="Кол-во позиций" value={reportSummary.totalQty} />
+                          </Card>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <Card size="small">
+                            <Statistic
+                              title="Авто начислено (KPI)"
+                              value={reportSummary.kpiSalaryAccrued}
+                              suffix="c"
+                            />
+                          </Card>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <Card size="small">
+                            <Statistic
+                              title="Авто KPI бонус"
+                              value={reportSummary.kpiAutoBonuses}
+                              suffix="c"
+                            />
+                          </Card>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <Card size="small">
+                            <Statistic
+                              title="Выручка"
+                              value={reportSummary.totalRevenue}
+                              suffix="c"
+                              styles={{
+                                content: {
+                                  color: reportSummary.totalRevenue >= 0 ? "#3f8600" : "#cf1322",
+                                },
+                              }}
+                            />
+                          </Card>
+                        </Col>
+                      </Row>
+
+                      <Card size="small" title="Предпросмотр (последние 20 строк)">
+                        <Table
+                          size="small"
+                          rowKey={(row) => row.id}
+                          dataSource={filteredReportSales.slice(0, 20)}
+                          pagination={false}
+                          scroll={{ x: 900 }}
+                          locale={{ emptyText: "Нет данных по выбранным фильтрам" }}
+                          columns={[
+                            {
+                              title: "Дата",
+                              dataIndex: "createdAt",
+                              width: 160,
+                              render: (_v, row) => formatDate(row.manualDate || row.createdAt, true),
+                            },
+                            { title: "Товар", dataIndex: "productName" },
+                            { title: "Клиент", dataIndex: "clientName" },
+                            { title: "Менеджер", dataIndex: "managerName", width: 160 },
+                            {
+                              title: "Кол-во",
+                              dataIndex: "quantity",
+                              width: 90,
+                              align: "right",
+                              render: (v: number) => Number(v || 1).toLocaleString(),
+                            },
+                            { title: "Филиал", dataIndex: "branch", width: 130 },
+                            { title: "Оплата", dataIndex: "paymentType", width: 120 },
+                            {
+                              title: "Сумма",
+                              dataIndex: "total",
+                              width: 120,
+                              align: "right",
+                              render: (v: number) => (
+                                <Typography.Text
+                                  strong
+                                  type={Number(v || 0) >= 0 ? "success" : "danger"}
+                                >
+                                  {Number(v || 0).toLocaleString()} c
+                                </Typography.Text>
+                              ),
+                            },
+                          ]}
+                        />
+                      </Card>
+                    </div>
+                  ),
+                },
+              ]
+            : []),
         ]}
       />
     </div>

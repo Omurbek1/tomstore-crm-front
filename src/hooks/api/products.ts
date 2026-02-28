@@ -7,9 +7,13 @@ export const useProducts = () =>
   useQuery({
     queryKey: ["products"],
     queryFn: async () => {
-      const { data } = await api.get<Product[]>("/products");
+      const { data } = await api.get<Product[]>("/products", {
+        params: { all: 1 },
+      });
       return data;
     },
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
   });
 
 export const useProductCategories = () =>
