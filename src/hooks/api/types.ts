@@ -11,6 +11,7 @@ export interface Product extends BaseEntity {
   name: string;
   category: string;
   categories?: string[];
+  barcode?: string;
   costPrice: number;
   sellingPrice: number;
   supplier?: string;
@@ -132,4 +133,38 @@ export interface ManagerPayoutBalance {
 export interface AppSettings extends BaseEntity {
   companyName: string;
   companyLogoUrl?: string;
+}
+
+export type RepairStatus =
+  | "received"
+  | "to_service"
+  | "diagnostic"
+  | "ready"
+  | "returned"
+  | "canceled";
+
+export interface RepairEvent extends BaseEntity {
+  ticketId: string;
+  text: string;
+  author: string;
+  status?: RepairStatus;
+}
+
+export interface RepairTicket extends BaseEntity {
+  clientName: string;
+  clientPhone?: string;
+  itemName: string;
+  serialNumber?: string;
+  issue: string;
+  branchName?: string;
+  status: RepairStatus;
+  messages?: RepairEvent[];
+}
+
+export interface PaginatedRepairs {
+  items: RepairTicket[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
 }

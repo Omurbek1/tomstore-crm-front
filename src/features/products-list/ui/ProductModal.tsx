@@ -6,6 +6,7 @@ import {
   Form,
   Input,
   InputNumber,
+  message,
   Modal,
   Row,
   Select,
@@ -18,6 +19,7 @@ import {
 import type { UploadProps } from "antd";
 import type { FormInstance } from "antd/es/form";
 import { toSafeMediaUrl } from "../../../security/url";
+import { useBarcodeScanner } from "../../../shared/lib/useBarcodeScanner";
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -80,10 +82,28 @@ export const ProductModal = ({
   onAddCategory,
   onUploadProductPhoto,
 }: ProductModalProps) => {
+  const applyScannedBarcode = (raw: string) => {
+    const code = String(raw || "")
+      .trim()
+      .replace(/\s+/g, "");
+    if (!code) return;
+    form.setFieldValue("barcode", code);
+    message.success(`Штрихкод считан: ${code}`);
+  };
+
+  useBarcodeScanner({
+    enabled: open && !isEditing,
+    minLength: 5,
+    onScan: applyScannedBarcode,
+  });
+
   return (
     <Modal open={open} title={isEditing ? "Редактировать товар" : "Товар"} footer={null} onCancel={onCancel}>
       <Form form={form} layout="vertical" onFinish={onSubmit}>
         <Form.Item name="name" label="Название" rules={[{ required: true }]}>
+          <Input />
+        </Form.Item>
+        <Form.Item name="barcode" hidden>
           <Input />
         </Form.Item>
         <Form.Item

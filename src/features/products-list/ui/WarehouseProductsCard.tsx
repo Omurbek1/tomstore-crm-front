@@ -66,6 +66,7 @@ export const WarehouseProductsCard = ({
   const [showImportHelp, setShowImportHelp] = useState(false);
   const REQUIRED_COLUMNS = ["name", "sellingPrice"];
   const OPTIONAL_COLUMNS = [
+    "barcode",
     "categories",
     "costPrice",
     "supplier",
@@ -78,6 +79,7 @@ export const WarehouseProductsCard = ({
   const downloadTemplate = () => {
     const header = [
       "название",
+      "штрихкод",
       "цена",
       "себестоимость",
       "категории",
@@ -90,6 +92,7 @@ export const WarehouseProductsCard = ({
     const rows = [
       [
         "iPhone 15 128GB",
+        "4890001234567",
         "85000",
         "72000",
         "Смартфоны|Apple",
@@ -101,6 +104,7 @@ export const WarehouseProductsCard = ({
       ],
       [
         "Принтер HP Laser 107a",
+        "6900002233445",
         "15000",
         "12000",
         "Принтеры|Офис",
@@ -112,6 +116,7 @@ export const WarehouseProductsCard = ({
       ],
       [
         "Samsung Galaxy A55",
+        "8800007788991",
         "32000",
         "27500",
         "Смартфоны|Samsung",

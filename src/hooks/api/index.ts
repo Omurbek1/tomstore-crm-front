@@ -8,3 +8,5 @@ export * from "./suppliers";
 export * from "./targets";
 export * from "./settings";
 export * from "./materials";
+export * from "./repairs";
+export * from "./types";

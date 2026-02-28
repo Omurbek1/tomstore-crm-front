@@ -18,6 +18,7 @@ import {
   ShopOutlined,
   SolutionOutlined,
   ReadOutlined,
+  ToolOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/ru";
@@ -118,6 +119,7 @@ import { MapAddressPickerModal } from "../features/suppliers/ui/MapAddressPicker
 import { ExpenseForm } from "../features/expenses/ui/ExpenseForm";
 import { SaleForm } from "../features/sales-form/ui/SaleForm";
 import { OwnerReportSection } from "../features/owner-report/ui/OwnerReportSection";
+import { RepairsSection } from "../features/repairs/ui/RepairsSection";
 
 dayjs.locale("ru");
 
@@ -147,6 +149,7 @@ interface Product extends BaseEntity {
   name: string;
   category: string;
   categories?: string[] | null;
+  barcode?: string;
   branchName?: string;
   costPrice: number;
   sellingPrice: number;
@@ -1194,6 +1197,15 @@ const AppContent = () => {
       ),
     },
     {
+      key: "11",
+      icon: <ToolOutlined />,
+      label: (
+        <p className={appTheme === "dark" ? "text-white" : "text-gray-800"}>
+          Ремонт
+        </p>
+      ),
+    },
+    {
       key: "6",
       icon: <SettingOutlined />,
       label: (
@@ -1271,9 +1283,13 @@ const AppContent = () => {
         ? Number(v.managerEarnings)
         : undefined;
     const managerEarnings = inferredManagerEarnings ?? manualManagerEarnings;
+    const barcode = String(v.barcode || "")
+      .trim()
+      .replace(/\s+/g, "");
 
     return {
       ...v,
+      barcode: barcode || undefined,
       categories: finalCategories,
       category: finalCategories[0],
       branchName: v.branchName as string,
@@ -1578,6 +1594,14 @@ const AppContent = () => {
               onOwnerBranchesChange={setOwnerSelectedBranches}
               onOwnerRangeChange={setOwnerRange}
               onExportCsv={downloadOwnerCsv}
+            />
+          )}
+          {activeTab === "11" && (
+            <RepairsSection
+              currentUserName={user.name}
+              branches={branches}
+              products={products}
+              formatDate={formatDate}
             />
           )}
           {activeTab === "6" && (

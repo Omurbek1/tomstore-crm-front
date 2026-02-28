@@ -14,6 +14,7 @@ import {
 } from "antd";
 import { EnvironmentOutlined, PhoneOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { useBarcodeScanner } from "../../../shared/lib/useBarcodeScanner";
 import {
   INSTALLMENT_PROVIDER_OPTIONS,
   buildInstallmentValue,
@@ -244,6 +245,36 @@ export const SaleForm = ({
     };
     onSubmit(payload);
   };
+
+  const applyBarcodeProduct = (raw: string) => {
+    const code = String(raw || "")
+      .trim()
+      .replace(/\s+/g, "");
+    if (!code) return;
+    const product =
+      productsByBranch.find((p) => String(p.barcode || "") === code) ||
+      products.find((p) => String(p.barcode || "") === code);
+    if (!product) {
+      message.warning("Товар по этому штрихкоду не найден");
+      return;
+    }
+    const available = getAvailableStock(product, products);
+    if (available <= 0) {
+      message.warning("Товар найден, но сейчас нет в наличии");
+      return;
+    }
+    form.setFieldsValue({
+      productId: product.id,
+      price: product.sellingPrice,
+    });
+    message.success(`Выбран товар: ${product.name}`);
+  };
+
+  useBarcodeScanner({
+    enabled: true,
+    minLength: 5,
+    onScan: applyBarcodeProduct,
+  });
 
   return (
     <Form form={form} layout="vertical" onFinish={onFinish}>

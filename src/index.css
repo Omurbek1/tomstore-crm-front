@@ -267,6 +267,31 @@ html.dark .app-root .finance-movement-row--expense > td {
   background: #3a2429 !important;
 }
 
+.app-root .repair-row > td {
+  transition: background-color 180ms ease;
+}
+
+.app-root .repair-row:hover > td {
+  background: #eef4ff !important;
+}
+
+.app-root .repair-row--active > td {
+  background: #e8f1ff !important;
+}
+
+.app-root .repair-chat-timeline {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface-elev) 82%, transparent);
+}
+
+html.dark .app-root .repair-row:hover > td {
+  background: #213552 !important;
+}
+
+html.dark .app-root .repair-row--active > td {
+  background: #274264 !important;
+}
+
 html.dark .app-root .text-gray-400 {
   color: #afbdd2 !important;
 }
