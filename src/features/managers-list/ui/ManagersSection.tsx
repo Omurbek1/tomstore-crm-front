@@ -1,5 +1,19 @@
-import { Avatar, Button, Card, Col, Popconfirm, Row, Table, Tooltip } from "antd";
-import { DashboardOutlined, DeleteOutlined, EditOutlined, UserOutlined } from "@ant-design/icons";
+import {
+  Avatar,
+  Button,
+  Card,
+  Col,
+  Popconfirm,
+  Row,
+  Table,
+  Tooltip,
+} from "antd";
+import {
+  DashboardOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
 import { toSafeMediaUrl } from "../../../security/url";
 
 type ManagerLike = {
@@ -11,9 +25,7 @@ type ManagerLike = {
   birthDate?: string;
   birthYear?: number;
   role: "superadmin" | "admin" | "manager" | "storekeeper" | "cashier";
-  roles?: Array<
-    "superadmin" | "admin" | "manager" | "storekeeper" | "cashier"
-  >;
+  roles?: Array<"superadmin" | "admin" | "manager" | "storekeeper" | "cashier">;
   salaryType?: "commission" | "fixed";
   fixedMonthlySalary?: number;
   canManageProducts?: boolean;
@@ -62,17 +74,29 @@ export const ManagersSection = ({
             <Card
               actions={[
                 <Tooltip title="Детали">
-                  <DashboardOutlined key="details" onClick={() => onShowDetails(m)} />
+                  <DashboardOutlined
+                    key="details"
+                    onClick={() => onShowDetails(m)}
+                  />
                 </Tooltip>,
                 isPrivileged(m) && !canManagePrivileged ? (
-                  <Tooltip key="edit-disabled" title="Только superadmin может редактировать admin/superadmin">
-                    <EditOutlined key="edit" className="text-gray-400 cursor-not-allowed" />
+                  <Tooltip
+                    key="edit-disabled"
+                    title="Только superadmin может редактировать admin/superadmin"
+                  >
+                    <EditOutlined
+                      key="edit"
+                      className="text-gray-400 cursor-not-allowed"
+                    />
                   </Tooltip>
                 ) : (
                   <EditOutlined key="edit" onClick={() => onEdit(m)} />
                 ),
                 isPrivileged(m) ? (
-                  <Tooltip key="del-disabled" title="Admin/Superadmin удалить нельзя">
+                  <Tooltip
+                    key="del-disabled"
+                    title="Admin/Superadmin удалить нельзя"
+                  >
                     <DeleteOutlined
                       key="del-icon-disabled"
                       className="text-gray-400 cursor-not-allowed"
@@ -107,14 +131,21 @@ export const ManagersSection = ({
                     <div>Филиал: {m.branchName || "—"}</div>
                     <div>Дата рожд.: {formatBirthDate(m)}</div>
                     <div>Роль: {m.role}</div>
-                    {m.roles?.length ? <div>Мульти-роли: {m.roles.join(", ")}</div> : null}
+                    {m.roles?.length ? (
+                      <div>Мульти-роли: {m.roles.join(", ")}</div>
+                    ) : null}
                     <div>
-                      Тип оплаты: {m.salaryType === "fixed" ? "Фикс. оклад" : "% с продаж"}
+                      Тип оплаты:{" "}
+                      {m.salaryType === "fixed" ? "Фикс. оклад" : "% с продаж"}
                     </div>
                     {m.salaryType === "fixed" ? (
-                      <div>Оклад: {Number(m.fixedMonthlySalary || 0).toLocaleString()} c</div>
+                      <div>
+                        Оклад:{" "}
+                        {Number(m.fixedMonthlySalary || 0).toLocaleString()} c
+                      </div>
                     ) : null}
-                    {m.role === "storekeeper" || m.roles?.includes("storekeeper") ? (
+                    {m.role === "storekeeper" ||
+                    m.roles?.includes("storekeeper") ? (
                       <div>
                         Управление товарами:{" "}
                         {m.canManageProducts ? "Разрешено" : "Запрещено"}
@@ -133,7 +164,12 @@ export const ManagersSection = ({
         </Col>
       </Row>
 
-      <Card className="mt-4" title={`Удаленные сотрудники (${deletedManagers.length})`}>
+      <Card
+        style={{
+            marginTop:30
+        }}
+        title={`Удаленные сотрудники (${deletedManagers.length})`}
+      >
         <Table
           rowKey="id"
           size="small"
@@ -162,7 +198,11 @@ export const ManagersSection = ({
               title: "Действие",
               width: 140,
               render: (_v, m) => (
-                <Button type="primary" size="small" onClick={() => onRestore(m.id)}>
+                <Button
+                  type="primary"
+                  size="small"
+                  onClick={() => onRestore(m.id)}
+                >
                   Восстановить
                 </Button>
               ),

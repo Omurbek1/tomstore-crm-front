@@ -223,7 +223,7 @@ export const ProductModal = ({
           </Select>
         </Form.Item>
         <Form.Item label="Фото товара">
-          <Space direction="vertical" style={{ width: "100%" }}>
+          <Space orientation="vertical" style={{ width: "100%" }}>
             <Upload accept="image/*" showUploadList={false} customRequest={onUploadProductPhoto}>
               <Button icon={<UploadOutlined />} loading={isUploadingPhoto}>
                 Добавить фото

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Alert,
   Button,
@@ -12,6 +13,7 @@ import {
   Tag,
   Typography,
   Upload,
+  Switch,
 } from "antd";
 import {
   DeleteOutlined,
@@ -61,6 +63,7 @@ export const WarehouseProductsCard = ({
   onDeleteProduct,
   getAvailableStock,
 }: Props) => {
+  const [showImportHelp, setShowImportHelp] = useState(false);
   const REQUIRED_COLUMNS = ["name", "sellingPrice"];
   const OPTIONAL_COLUMNS = [
     "categories",
@@ -264,32 +267,59 @@ export const WarehouseProductsCard = ({
           </Space>
         </div>
         {canManageProducts ? (
-          <Card size="small" className="mb-3 !bg-gray-50">
-            <Typography.Text strong>Импорт товаров из CSV</Typography.Text>
-            <div className="mt-2">
-              <Typography.Text type="secondary">Обязательные колонки:</Typography.Text>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {REQUIRED_COLUMNS.map((col) => (
-                  <Tag key={col} color="blue">
-                    {col}
-                  </Tag>
-                ))}
-              </div>
-            </div>
-            <div className="mt-2">
-              <Typography.Text type="secondary">Дополнительные колонки:</Typography.Text>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {OPTIONAL_COLUMNS.map((col) => (
-                  <Tag key={col}>{col}</Tag>
-                ))}
-              </div>
-            </div>
-            <Alert
-              className="mt-2"
-              type="info"
-              showIcon
-              message="Поддерживаются разделители: запятая, точка с запятой, таб."
-            />
+          <Card
+            size="small"
+            className="mb-3 warehouse-csv-help"
+            title={<Typography.Text strong>Импорт товаров из CSV</Typography.Text>}
+            extra={
+              <Space size={8}>
+                <Typography.Text type="secondary">
+                  {showImportHelp ? "Скрыть" : "Показать"}
+                </Typography.Text>
+                <Switch
+                  size="small"
+                  checked={showImportHelp}
+                  onChange={setShowImportHelp}
+                />
+              </Space>
+            }
+          >
+            {showImportHelp ? (
+              <>
+                <div className="mt-1">
+                  <Typography.Text type="secondary">
+                    Обязательные колонки:
+                  </Typography.Text>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {REQUIRED_COLUMNS.map((col) => (
+                      <Tag key={col} color="blue">
+                        {col}
+                      </Tag>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <Typography.Text type="secondary">
+                    Дополнительные колонки:
+                  </Typography.Text>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {OPTIONAL_COLUMNS.map((col) => (
+                      <Tag key={col}>{col}</Tag>
+                    ))}
+                  </div>
+                </div>
+                <Alert
+                  className="mt-2"
+                  type="info"
+                  showIcon
+                  title="Поддерживаются разделители: запятая, точка с запятой, таб."
+                />
+              </>
+            ) : (
+              <Typography.Text type="secondary">
+                Подсказка скрыта. Включите тумблер, чтобы показать колонки CSV.
+              </Typography.Text>
+            )}
           </Card>
         ) : null}
         <Table

@@ -112,6 +112,11 @@ export const FinanceSection = ({
     sub: string;
     amount: number;
   };
+  const movementRowClassByType: Record<Movement["type"], string> = {
+    income: "finance-movement-row finance-movement-row--income",
+    bonus: "finance-movement-row finance-movement-row--bonus",
+    expense: "finance-movement-row finance-movement-row--expense",
+  };
   const allMovements: Movement[] = [
     ...sales.map((s) => ({
       key: `s-${s.id}`,
@@ -218,13 +223,7 @@ export const FinanceSection = ({
                 size="small"
                 pagination={{ pageSize: 15 }}
                 scroll={{ x: 700 }}
-                rowClassName={(r) =>
-                  r.type === "income"
-                    ? "bg-green-50"
-                    : r.type === "bonus"
-                      ? "bg-orange-50"
-                      : "bg-red-50"
-                }
+                rowClassName={(r) => movementRowClassByType[r.type]}
               />
             ),
           },

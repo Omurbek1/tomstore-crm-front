@@ -1,4 +1,4 @@
-import { Button, Form, Input, Modal } from "antd";
+import { Button, Form, Input, Modal, Space } from "antd";
 import type { FormInstance } from "antd/es/form";
 import { EnvironmentOutlined, PhoneOutlined } from "@ant-design/icons";
 
@@ -36,14 +36,10 @@ export const SupplierModal = ({
         </Form.Item>
 
         <Form.Item name="address" label="Адрес">
-          <Input
-            prefix={<EnvironmentOutlined />}
-            addonAfter={
-              <Button type="link" size="small" onClick={onOpenMap}>
-                Карта
-              </Button>
-            }
-          />
+          <Space.Compact style={{ width: "100%" }}>
+            <Input prefix={<EnvironmentOutlined />} style={{ flex: 1 }} />
+            <Button onClick={onOpenMap}>Карта</Button>
+          </Space.Compact>
         </Form.Item>
 
         <Button type="primary" htmlType="submit" block>

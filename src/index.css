@@ -1,1 +1,368 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --bg: #f5f7fb;
+  --bg-accent: #edf3ff;
+  --surface: #ffffff;
+  --surface-elev: #f6f9ff;
+  --text: #111827;
+  --text-soft: #5b6475;
+  --border: #dde5f0;
+  --shadow: 0 8px 26px rgba(31, 56, 88, 0.08);
+  --scroll-thumb: #afc0d8;
+  --scroll-track: rgba(71, 85, 105, 0.1);
+  --focus: #7aa5ff;
+}
+
+html.dark {
+  color-scheme: dark;
+  --bg: #111826;
+  --bg-accent: #1a2a43;
+  --surface: #172335;
+  --surface-elev: #1d2c46;
+  --text: #e2eaf7;
+  --text-soft: #afbdd2;
+  --border: #344862;
+  --shadow: 0 12px 34px rgba(2, 8, 23, 0.4);
+  --scroll-thumb: #6881a4;
+  --scroll-track: rgba(148, 163, 184, 0.12);
+  --focus: #93b0e0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  line-height: 1.45;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  color: var(--text);
+  background:
+    radial-gradient(1150px 420px at 0% -15%, var(--bg-accent), transparent 62%),
+    radial-gradient(
+      900px 340px at 100% -25%,
+      color-mix(in srgb, var(--focus) 20%, transparent),
+      transparent 62%
+    ),
+    var(--bg);
+  transition:
+    background-color 240ms ease,
+    color 240ms ease;
+}
+
+.app-root {
+  color: var(--text);
+}
+
+.app-root .ant-layout {
+  background: transparent;
+}
+
+html.dark body {
+  background:
+    radial-gradient(
+      1150px 420px at 0% -15%,
+      color-mix(in srgb, var(--bg-accent) 86%, #0b1320 14%),
+      transparent 64%
+    ),
+    radial-gradient(
+      900px 340px at 100% -25%,
+      color-mix(in srgb, var(--focus) 12%, transparent),
+      transparent 64%
+    ),
+    var(--bg);
+}
+
+.app-root .ant-card,
+.app-root .ant-modal-content,
+.app-root .ant-dropdown .ant-dropdown-menu {
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+html.dark .app-root .ant-modal-header,
+html.dark .app-root .ant-drawer-header {
+  background: transparent;
+  border-bottom-color: var(--border);
+}
+
+.app-root .ant-card .ant-card-head {
+  border-bottom-color: var(--border);
+}
+
+.app-root .ant-table-wrapper .ant-table {
+  background: var(--surface);
+}
+
+html.dark .app-root .ant-table-wrapper .ant-table-cell,
+html.dark .app-root .ant-table-wrapper .ant-table-column-title,
+html.dark .app-root .ant-table-wrapper .ant-table-thead > tr > th {
+  color: var(--text);
+}
+
+.app-root .ant-table-wrapper .ant-table-thead > tr > th {
+  border-bottom-color: var(--border);
+}
+
+.app-root .ant-table-wrapper .ant-table-tbody > tr > td {
+  border-bottom-color: var(--border);
+}
+
+.app-root .ant-list .ant-list-item {
+  border-bottom-color: var(--border);
+}
+
+.app-root .ant-divider {
+  border-color: var(--border);
+}
+
+.app-root .ant-typography,
+.app-root .ant-statistic-title,
+.app-root .ant-statistic-content,
+.app-root .ant-form-item-label > label {
+  color: var(--text);
+}
+
+.app-root .ant-typography.ant-typography-secondary,
+.app-root .ant-form-item-explain,
+.app-root .ant-form-item-extra {
+  color: var(--text-soft);
+}
+
+.app-root .ant-statistic-title {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.app-root .ant-statistic-content {
+  font-weight: 600;
+}
+
+.app-root .ant-input,
+.app-root .ant-input-affix-wrapper,
+.app-root .ant-input-number,
+.app-root .ant-input-number-input,
+.app-root .ant-select-selector,
+.app-root .ant-picker,
+.app-root .ant-btn-default,
+.app-root .ant-radio-button-wrapper,
+.app-root .ant-checkbox-wrapper,
+.app-root .ant-switch {
+  border-color: var(--border);
+}
+
+.app-root .ant-input,
+.app-root .ant-input-affix-wrapper,
+.app-root .ant-input-number,
+.app-root .ant-select-selector,
+.app-root .ant-picker,
+.app-root .ant-radio-button-wrapper {
+  background: var(--surface-elev);
+}
+
+html.dark .app-root .ant-select-dropdown,
+html.dark .app-root .ant-picker-dropdown .ant-picker-panel-container,
+html.dark .app-root .ant-dropdown-menu {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+html.dark .app-root .ant-select-item,
+html.dark .app-root .ant-dropdown-menu-item,
+html.dark .app-root .ant-picker-cell-inner {
+  color: var(--text);
+}
+
+html.dark .app-root .ant-select-item-option-active,
+html.dark .app-root .ant-dropdown-menu-item:hover {
+  background: color-mix(in srgb, var(--surface-elev) 78%, #253a58 22%);
+}
+
+.app-root .ant-input:focus,
+.app-root .ant-input-affix-wrapper-focused,
+.app-root .ant-select-focused .ant-select-selector,
+.app-root .ant-picker-focused,
+.app-root .ant-input-number-focused {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+
+.app-root .ant-btn-primary {
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--focus) 32%, transparent);
+}
+
+.app-root .ant-layout-header {
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+}
+
+.app-root .ant-layout-sider {
+  border-right: 1px solid var(--border);
+}
+
+.app-root .app-main-content {
+  position: relative;
+}
+
+.app-root .app-main-content.is-light {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.78),
+      rgba(255, 255, 255, 0.92)
+    ),
+    radial-gradient(
+      900px 320px at 0% -20%,
+      rgba(59, 130, 246, 0.08),
+      transparent 64%
+    );
+}
+
+.app-root .app-main-content.is-dark {
+  background:
+    linear-gradient(180deg, rgba(21, 33, 52, 0.8), rgba(18, 29, 46, 0.92)),
+    radial-gradient(
+      900px 320px at 0% -20%,
+      rgba(110, 146, 204, 0.15),
+      transparent 66%
+    );
+}
+
+.app-root .warehouse-csv-help {
+  background: color-mix(in srgb, var(--surface-elev) 86%, transparent);
+  border-color: var(--border);
+}
+
+html.dark .app-root .warehouse-csv-help .ant-alert-info {
+  background: color-mix(in srgb, #253b59 58%, var(--surface) 42%);
+  border-color: #38547b;
+}
+
+.app-root .finance-movement-row--income > td {
+  background: #f0fdf4 !important;
+}
+
+.app-root .finance-movement-row--bonus > td {
+  background: #fff7ed !important;
+}
+
+.app-root .finance-movement-row--expense > td {
+  background: #fef2f2 !important;
+}
+
+html.dark .app-root .finance-movement-row--income > td {
+  background: #1a3a30 !important;
+}
+
+html.dark .app-root .finance-movement-row--bonus > td {
+  background: #3d2f1f !important;
+}
+
+html.dark .app-root .finance-movement-row--expense > td {
+  background: #3a2429 !important;
+}
+
+html.dark .app-root .text-gray-400 {
+  color: #afbdd2 !important;
+}
+
+html.dark .app-root .text-gray-500 {
+  color: #9db0c9 !important;
+}
+
+html.dark .app-root .text-gray-800 {
+  color: var(--text) !important;
+}
+
+html.dark .app-root .bg-gray-50,
+html.dark .app-root .hover\:bg-gray-50:hover {
+  background-color: #1d2d47 !important;
+}
+
+html.dark .app-root .bg-white,
+html.dark .app-root .bg-gray-100 {
+  background-color: var(--surface) !important;
+}
+
+html.dark .app-root .bg-gray-800 {
+  background-color: #1d2d47 !important;
+}
+
+html.dark .app-root .bg-gray-900 {
+  background-color: #152236 !important;
+}
+
+html.dark .app-root .border-gray-100,
+html.dark .app-root .border-gray-200,
+html.dark .app-root .border-gray-300,
+html.dark .app-root .border-gray-700 {
+  border-color: var(--border) !important;
+}
+
+html[data-ui-mode="comfort"] body {
+  line-height: 1.55;
+}
+
+html[data-ui-mode="comfort"] .app-root .ant-card,
+html[data-ui-mode="comfort"] .app-root .ant-modal-content {
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--shadow) 70%, transparent);
+}
+
+html[data-ui-mode="comfort"] .app-root .ant-card .ant-card-head {
+  min-height: 54px;
+}
+
+html[data-ui-mode="comfort"] .app-root .ant-card .ant-card-body {
+  padding: 20px;
+}
+
+html[data-ui-mode="comfort"] .app-root .ant-form-item {
+  margin-bottom: 18px;
+}
+
+html[data-ui-mode="comfort"]
+  .app-root
+  .ant-table-wrapper
+  .ant-table-thead
+  > tr
+  > th,
+html[data-ui-mode="comfort"]
+  .app-root
+  .ant-table-wrapper
+  .ant-table-tbody
+  > tr
+  > td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+html[data-ui-mode="comfort"] .app-root .ant-statistic-content {
+  letter-spacing: 0.01em;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) var(--scroll-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scroll-track);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}

@@ -10,6 +10,7 @@ import {
   Space,
   Statistic,
   Switch,
+  Segmented,
   Table,
   Tag,
   Upload,
@@ -50,12 +51,14 @@ type UserLike = {
 };
 
 type AppTheme = "light" | "dark";
+type UiMode = "default" | "comfort";
 
 type Props = {
   user: UserLike;
   sales: SaleLike[];
   isAdmin: boolean;
   appTheme: AppTheme;
+  uiMode: UiMode;
   companyForm: FormInstance<{
     companyName?: string;
     companyLogoUrl?: string;
@@ -69,6 +72,7 @@ type Props = {
     companyLogoUrl?: string;
   }) => void;
   onThemeChange: (dark: boolean) => void;
+  onUiModeChange: (mode: UiMode) => void;
   onUploadCompanyLogo: (options: unknown) => void;
   formatDate: (value?: string | null, withTime?: boolean) => string;
   deliveryStatuses: Record<DeliveryStatusCode, { text: string; color: string }>;
@@ -79,6 +83,7 @@ export const SettingsSection = ({
   sales,
   isAdmin,
   appTheme,
+  uiMode,
   companyForm,
   isUploadingCompanyLogo,
   profileSubmitting,
@@ -86,6 +91,7 @@ export const SettingsSection = ({
   onProfileSubmit,
   onCompanySubmit,
   onThemeChange,
+  onUiModeChange,
   onUploadCompanyLogo,
   formatDate,
   deliveryStatuses,
@@ -241,7 +247,7 @@ export const SettingsSection = ({
       </Col>
       <Col xs={24} md={12}>
         <Card title="Внешний вид">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <div className="font-semibold">Тёмная тема</div>
               <div className="text-sm text-gray-400">
@@ -253,6 +259,23 @@ export const SettingsSection = ({
               unCheckedChildren={<SunOutlined />}
               checked={appTheme === "dark"}
               onChange={onThemeChange}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold">Режим интерфейса</div>
+              <div className="text-sm text-gray-400">
+                Комфортный режим снижает контраст и увеличивает отступы
+              </div>
+            </div>
+            <Segmented
+              size="middle"
+              value={uiMode}
+              onChange={(v) => onUiModeChange(v as UiMode)}
+              options={[
+                { label: "Обычный", value: "default" },
+                { label: "Комфорт", value: "comfort" },
+              ]}
             />
           </div>
         </Card>
