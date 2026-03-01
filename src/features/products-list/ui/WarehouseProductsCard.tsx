@@ -36,8 +36,10 @@ type ProductLike = {
 
 type Props = {
   products: ProductLike[];
+  filteredCount?: number;
   lowStockCount: number;
   search: string;
+  branchName?: string;
   canManageProducts: boolean;
   importLoading?: boolean;
   onSearchChange: (v: string) => void;
@@ -45,14 +47,18 @@ type Props = {
   onCreateProduct: () => void;
   onEditProduct: (p: ProductLike) => void;
   onImportProducts: (file: File) => void;
+  onExportProducts: () => void;
+  onExportFilteredProducts: () => void;
   onDeleteProduct: (id: string) => void;
   getAvailableStock: (product: ProductLike, products: ProductLike[]) => number;
 };
 
 export const WarehouseProductsCard = ({
   products,
+  filteredCount,
   lowStockCount,
   search,
+  branchName,
   canManageProducts,
   importLoading,
   onSearchChange,
@@ -60,10 +66,13 @@ export const WarehouseProductsCard = ({
   onCreateProduct,
   onEditProduct,
   onImportProducts,
+  onExportProducts,
+  onExportFilteredProducts,
   onDeleteProduct,
   getAvailableStock,
 }: Props) => {
   const [showImportHelp, setShowImportHelp] = useState(false);
+  const isLargeList = products.length > 15;
   const REQUIRED_COLUMNS = ["name", "sellingPrice"];
   const OPTIONAL_COLUMNS = [
     "barcode",
@@ -264,6 +273,12 @@ export const WarehouseProductsCard = ({
                 <Button icon={<DownloadOutlined />} onClick={downloadTemplate}>
                   Шаблон CSV
                 </Button>
+                <Button icon={<DownloadOutlined />} onClick={onExportProducts}>
+                  Выгрузить все товары
+                </Button>
+                <Button icon={<DownloadOutlined />} onClick={onExportFilteredProducts}>
+                  Выгрузить текущий фильтр{typeof filteredCount === "number" ? ` (${filteredCount})` : ""}
+                </Button>
                 <Button onClick={onCreateProduct} icon={<PlusOutlined />}>
                   Добавить товар
                 </Button>
@@ -271,6 +286,12 @@ export const WarehouseProductsCard = ({
             )}
           </Space>
         </div>
+        {canManageProducts ? (
+          <Typography.Text type="secondary" className="block mb-2 text-xs">
+            Экспорт фильтра выгружает только товары, которые сейчас видны в таблице
+            {search.trim() ? ` (поиск: "${search.trim()}")` : ""} {branchName ? `· филиал: ${branchName}` : ""}.
+          </Typography.Text>
+        ) : null}
         {canManageProducts ? (
           <Card
             size="small"
@@ -332,9 +353,24 @@ export const WarehouseProductsCard = ({
           size="small"
           dataSource={products}
           columns={productColumns}
-          pagination={{ pageSize: 10 }}
+          pagination={{ pageSize: 15 }}
           scroll={{ x: 760 }}
         />
+        {canManageProducts && isLargeList ? (
+          <div className="mt-3 p-2 rounded border flex flex-wrap items-center gap-2 justify-between">
+            <Typography.Text type="secondary" className="text-xs">
+              Список большой ({products.length} товаров). Быстрые действия экспорта:
+            </Typography.Text>
+            <Space wrap>
+              <Button size="small" icon={<DownloadOutlined />} onClick={onExportProducts}>
+                Все товары
+              </Button>
+              <Button size="small" type="primary" icon={<DownloadOutlined />} onClick={onExportFilteredProducts}>
+                Текущий фильтр{typeof filteredCount === "number" ? ` (${filteredCount})` : ""}
+              </Button>
+            </Space>
+          </div>
+        ) : null}
       </Card>
     </>
   );

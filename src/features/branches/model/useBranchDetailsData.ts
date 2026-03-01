@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { getAvailableStock } from "../../../shared/lib/inventory";
+import { deliveryCostExpense } from "../../../shared/lib/sales";
 import { useInventoryMovements } from "../../warehouse/model/hooks";
 
 type BranchLike = {
@@ -19,6 +20,10 @@ type SaleLike = {
   costPriceSnapshot: number;
   managerEarnings: number;
   deliveryCost?: number;
+  deliveryPaidByCompany?: boolean;
+  price?: number;
+  discount?: number;
+  saleType?: "office" | "delivery";
 };
 
 type ManagerLike = {
@@ -114,7 +119,7 @@ export const useBranchDetailsData = ({
         (s.total -
           s.costPriceSnapshot * s.quantity -
           s.managerEarnings -
-          (s.deliveryCost || 0)),
+          deliveryCostExpense(s)),
       0,
     );
     const directExpensesTotal = branchExpenses.reduce((sum, e) => sum + e.amount, 0);

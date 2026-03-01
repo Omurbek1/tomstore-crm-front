@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 type SalaryHistoryItem = {
   key: string;
   date: string;
-  type: "sale" | "bonus" | "advance";
+  type: "sale" | "bonus" | "advance" | "expense";
   title: string;
   amount: number;
 };
@@ -44,11 +44,11 @@ export const SalaryHistoryModal = ({ open, data, onCancel, formatDate }: Props) 
       .filter((item) => item.type === "bonus")
       .reduce((sum, item) => sum + item.amount, 0);
     const advancesTotal = filteredItems
-      .filter((item) => item.type === "advance")
+      .filter((item) => item.type === "advance" || item.type === "expense")
       .reduce((sum, item) => sum + item.amount, 0);
     const salaryBase =
       data?.salaryType === "fixed"
-        ? Number(data.fixedMonthlySalary || 0)
+        ? Number(data.fixedMonthlySalary || 0) + salesTotal
         : salesTotal;
     return {
       salesTotal,
@@ -91,7 +91,7 @@ export const SalaryHistoryModal = ({ open, data, onCancel, formatDate }: Props) 
               <Statistic title="Выплачено ЗП/Бонус" value={totals.bonusesTotal} suffix="c" />
             </Col>
             <Col span={8}>
-              <Statistic title="Авансы/Штрафы" value={totals.advancesTotal} suffix="c" />
+              <Statistic title="Удержания" value={totals.advancesTotal} suffix="c" />
             </Col>
           </Row>
           <Card size="small">

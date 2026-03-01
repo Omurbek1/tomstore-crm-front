@@ -65,6 +65,7 @@ export const useCreateTask = () => {
       priority?: TaskPriority;
       createdById?: string;
       createdByName?: string;
+      attachmentUrls?: string[];
     }) => {
       const { data } = await api.post<Task>("/tasks", payload);
       return data;
@@ -96,6 +97,7 @@ export const useUpdateTask = () => {
         deadline: string | null;
         priority: TaskPriority;
         status: TaskStatus;
+        attachmentUrls: string[];
       }>;
     }) => {
       const { data: updated } = await api.patch<Task>(`/tasks/${id}`, data);

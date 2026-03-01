@@ -41,7 +41,8 @@ type Props = {
     name: string;
     phone: string;
     address: string;
-    branchId: string;
+    branchId?: string;
+    managedBranchIds?: string[];
     birthDate?: string;
     photoUrl?: string;
     password?: string;
@@ -78,6 +79,8 @@ export const ManagerModal = ({
   const selectedRoles = (Form.useWatch("roles", form) as Role[] | undefined) || [];
   const hasStorekeeperRole =
     mainRole === "storekeeper" || selectedRoles.includes("storekeeper");
+  const hasSuperadminRole =
+    mainRole === "superadmin" || selectedRoles.includes("superadmin");
 
   return (
     <Modal
@@ -105,11 +108,11 @@ export const ManagerModal = ({
               validator: (_, value) =>
                 isValidKgPhone(value)
                   ? Promise.resolve()
-                  : Promise.reject(new Error("Формат: +996 700 123 456")),
+                  : Promise.reject(new Error("Укажите корректный международный номер")),
             },
           ]}
         >
-          <Input prefix={<PhoneOutlined />} placeholder="+996 700 123 456" />
+          <Input prefix={<PhoneOutlined />} placeholder="+1 202 555 0147 / +996 700 123 456" />
         </Form.Item>
 
         <Form.Item name="address" label="Адрес" rules={[{ required: true }]}>
@@ -119,7 +122,11 @@ export const ManagerModal = ({
         <Form.Item
           name="branchId"
           label="Филиал"
-          rules={[{ required: true, message: "Выберите филиал" }]}
+          rules={
+            hasSuperadminRole
+              ? []
+              : [{ required: true, message: "Выберите филиал" }]
+          }
         >
           <Select placeholder="Выберите филиал">
             {branches.map((b) => (
@@ -129,6 +136,25 @@ export const ManagerModal = ({
             ))}
           </Select>
         </Form.Item>
+
+        {hasSuperadminRole ? (
+          <Form.Item
+            name="managedBranchIds"
+            label="Управляемые филиалы (для Superadmin)"
+            rules={[
+              { required: true, message: "Выберите хотя бы один филиал" },
+            ]}
+            tooltip="Superadmin сможет управлять выбранными филиалами"
+          >
+            <Select mode="multiple" placeholder="Выберите филиалы">
+              {branches.map((b) => (
+                <Option key={b.id} value={b.id}>
+                  {b.name}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+        ) : null}
 
         <Form.Item
           name="birthDate"

@@ -7,25 +7,28 @@ import {
   Form,
   Input,
   InputNumber,
-  Radio,
   Row,
   Select,
+  Tag,
   message,
 } from "antd";
 import { EnvironmentOutlined, PhoneOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { normalizeIntlPhone } from "../../../shared/lib/phone";
 import { useBarcodeScanner } from "../../../shared/lib/useBarcodeScanner";
 import {
   INSTALLMENT_PROVIDER_OPTIONS,
   buildInstallmentValue,
   parseInstallmentValue,
 } from "../model/installment";
+import { useAiOrderDraft } from "../../../hooks/api";
 
 type Props = {
   initialValues?: any;
   products: any[];
   branches: any[];
   managers: any[];
+  clients?: any[];
   isAdmin: boolean;
   currentUser?: { id?: string; name?: string; branchName?: string } | null;
   isDark: boolean;
@@ -50,6 +53,7 @@ export const SaleForm = ({
   products,
   branches,
   managers,
+  clients = [],
   isAdmin,
   currentUser,
   isDark,
@@ -58,10 +62,13 @@ export const SaleForm = ({
   onSubmit,
 }: Props) => {
   const [form] = Form.useForm();
+  const [aiText, setAiText] = useState("");
   const [includeDeliveryOverride, setIncludeDelivery] = useState<boolean | null>(null);
+  const aiOrderDraft = useAiOrderDraft();
   const saleType = Form.useWatch("saleType", form);
   const productId = Form.useWatch("productId", form);
   const managerId = Form.useWatch("managerId", form);
+  const clientId = Form.useWatch("clientId", form);
   const selectedBranch = Form.useWatch("branch", form);
   const paymentType = Form.useWatch("paymentType", form);
   const installmentPlan = Form.useWatch("installmentPlan", form);
@@ -69,6 +76,9 @@ export const SaleForm = ({
   const includeDelivery = useMemo(() => {
     if (includeDeliveryOverride !== null) return includeDeliveryOverride;
     if (initialValues) {
+      if (typeof initialValues.deliveryPaidByCompany === "boolean") {
+        return !initialValues.deliveryPaidByCompany;
+      }
       return !!(
         initialValues.saleType === "delivery" &&
         initialValues.deliveryCost &&
@@ -85,6 +95,10 @@ export const SaleForm = ({
   const selectedManager = useMemo<ManagerInfo | undefined>(
     () => managers.find((m) => m.id === (managerId || currentUser?.id)),
     [managers, managerId, currentUser],
+  );
+  const selectedClient = useMemo(
+    () => clients.find((c) => c.id === clientId),
+    [clients, clientId],
   );
   const selectedManagerIsFixed = useMemo(() => {
     const selectedRoles = (selectedManager?.roles || []).map((x) => String(x));
@@ -163,6 +177,16 @@ export const SaleForm = ({
     }
   }, [productId, selectedBranch, products, form]);
 
+  useEffect(() => {
+    if (!clientId) return;
+    const client = clients.find((c) => c.id === clientId);
+    if (!client) return;
+    if (!form.getFieldValue("clientName")) form.setFieldValue("clientName", client.fullName);
+    if (!form.getFieldValue("clientPhone") && client.phone) {
+      form.setFieldValue("clientPhone", normalizeIntlPhone(client.phone));
+    }
+  }, [clientId, clients, form]);
+
   const onFinish = (values: any) => {
     const product = products.find((p) => p.id === values.productId);
     const quantity = values.quantity;
@@ -174,6 +198,10 @@ export const SaleForm = ({
 
     if (values.saleType === "delivery") {
       deliveryCost = values.deliveryCost || 0;
+      if (deliveryCost < 0) {
+        message.error("Стоимость доставки не может быть отрицательной");
+        return;
+      }
       if (includeDelivery) total += deliveryCost;
     }
 
@@ -208,7 +236,6 @@ export const SaleForm = ({
     if (!isAdmin || values.managerEarningsOverride === undefined) {
       if (!fixedSalaryEmployee) {
         earnings = (product?.managerEarnings || 0) * quantity;
-        if (values.saleType === "office") earnings = earnings / 2;
       } else {
         earnings = 0;
       }
@@ -240,6 +267,9 @@ export const SaleForm = ({
       bookingBuyout:
         values.paymentType === "booking" ? Number(values.bookingBuyout || 0) : null,
       deliveryCost,
+      deliveryPaidByCompany:
+        values.saleType === "delivery" ? !includeDelivery : false,
+      cashbackToUse: Number(values.cashbackToUse || 0),
       managerEarnings: earnings,
       managerId: values.managerId || currentUser?.id,
       managerName:
@@ -278,17 +308,159 @@ export const SaleForm = ({
     onScan: applyBarcodeProduct,
   });
 
+  const normalizeByName = (value?: string) =>
+    String(value || "")
+      .trim()
+      .toLowerCase();
+
+  const applyAiDraft = (draft: {
+    clientName?: string;
+    clientPhone?: string;
+    clientAddress?: string;
+    branchName?: string;
+    productName?: string;
+    quantity?: number;
+    price?: number;
+    saleType?: "office" | "delivery";
+    paymentType?: "cash" | "installment" | "hybrid" | "booking" | "manual";
+    paymentLabel?: string;
+    installmentMonths?: number;
+    deliveryCost?: number;
+    clientPaysDelivery?: boolean;
+    bookingDeposit?: number;
+    bookingBuyout?: number;
+    managerName?: string;
+    comment?: string;
+  }) => {
+    const draftProductName = normalizeByName(draft.productName);
+    const draftBranchName = normalizeByName(draft.branchName);
+    const draftManagerName = normalizeByName(draft.managerName);
+
+    const product =
+      products.find((p) => normalizeByName(p.name) === draftProductName) ||
+      products.find((p) => draftProductName && normalizeByName(p.name).includes(draftProductName));
+    const branch =
+      branches.find((b) => normalizeByName(b.name) === draftBranchName) ||
+      branches.find((b) => draftBranchName && normalizeByName(b.name).includes(draftBranchName));
+    const manager =
+      managers.find((m) => normalizeByName(m.name) === draftManagerName) ||
+      managers.find((m) => draftManagerName && normalizeByName(m.name).includes(draftManagerName));
+
+    const values: Record<string, unknown> = {};
+    if (draft.clientName) values.clientName = draft.clientName;
+    if (draft.clientPhone) values.clientPhone = normalizeIntlPhone(draft.clientPhone);
+    if (draft.clientAddress) values.clientAddress = draft.clientAddress;
+    if (draft.comment) values.comment = draft.comment;
+    if (branch?.name) values.branch = branch.name;
+    if (manager?.id) values.managerId = manager.id;
+    if (draft.saleType) values.saleType = draft.saleType;
+    if (draft.paymentType) values.paymentType = draft.paymentType;
+    if (draft.paymentLabel) values.paymentLabel = draft.paymentLabel;
+    if (draft.quantity && Number(draft.quantity) > 0) {
+      values.quantity = Math.max(1, Math.round(Number(draft.quantity)));
+    }
+    if (Number.isFinite(Number(draft.price)) && Number(draft.price) > 0) {
+      values.price = Number(draft.price);
+    }
+    if (product?.id) {
+      values.productId = product.id;
+      if (values.price === undefined) values.price = Number(product.sellingPrice || 0);
+    }
+    if (Number.isFinite(Number(draft.deliveryCost)) && Number(draft.deliveryCost) >= 0) {
+      values.deliveryCost = Number(draft.deliveryCost);
+    }
+    if (draft.paymentType === "booking") {
+      if (Number.isFinite(Number(draft.bookingDeposit))) {
+        values.bookingDeposit = Math.max(0, Number(draft.bookingDeposit));
+      }
+      if (Number.isFinite(Number(draft.bookingBuyout))) {
+        values.bookingBuyout = Math.max(0, Number(draft.bookingBuyout));
+      }
+    }
+    if (
+      draft.paymentType === "installment" &&
+      Number(draft.installmentMonths || 0) > 0
+    ) {
+      const provider = String(draft.paymentLabel || "").trim() || "Рассрочка";
+      values.installmentPlan = buildInstallmentValue(
+        provider,
+        Number(draft.installmentMonths),
+      );
+    }
+    if (draft.saleType === "delivery" && typeof draft.clientPaysDelivery === "boolean") {
+      setIncludeDelivery(draft.clientPaysDelivery);
+      if (draft.clientPaysDelivery) values.deliveryCost = 0;
+    }
+
+    form.setFieldsValue(values);
+
+    const hints: string[] = [];
+    if (draft.productName && !product) hints.push("товар не найден точно");
+    if (draft.branchName && !branch) hints.push("филиал не найден точно");
+    if (draft.managerName && !manager) hints.push("менеджер не найден точно");
+    if (hints.length > 0) message.warning(`Проверьте: ${hints.join(", ")}`);
+    else message.success("Черновик заказа заполнен через ИИ");
+  };
+
+
   return (
     <Form form={form} layout="vertical" onFinish={onFinish}>
-      <Form.Item name="saleType" className="mb-4">
-        <Radio.Group buttonStyle="solid" className="w-full flex">
-          <Radio.Button value="office" className="flex-1 text-center">
-            Офис
-          </Radio.Button>
-          <Radio.Button value="delivery" className="flex-1 text-center">
-            Доставка
-          </Radio.Button>
-        </Radio.Group>
+      <Form.Item label="ИИ автозаполнение">
+        <Input.TextArea
+          rows={2}
+          value={aiText}
+          onChange={(e) => setAiText(e.target.value)}
+          placeholder="Например: Айжан, iPhone 15 Pro 2 шт, доставка в Ош, наличные, клиент оплачивает доставку"
+        />
+        <div className="mt-2">
+          <Button
+            loading={aiOrderDraft.isPending}
+            onClick={() => {
+              const text = aiText.trim();
+              if (!text) {
+                message.warning("Введите текст заказа");
+                return;
+              }
+              aiOrderDraft.mutate(
+                {
+                  text,
+                  locale: "ru",
+                  branches: branches.map((b) => b.name),
+                  products: products.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    price: Number(p.sellingPrice || 0),
+                  })),
+                  managers: managers.map((m) => ({
+                    id: m.id,
+                    name: m.name,
+                    role: m.role,
+                  })),
+                  manualPaymentTypes,
+                },
+                {
+                  onSuccess: (res) => {
+                    applyAiDraft(res.draft);
+                    setAiText("");
+                  },
+                },
+              );
+            }}
+          >
+            Заполнить через ИИ
+          </Button>
+        </div>
+      </Form.Item>
+
+      <Form.Item
+        name="saleType"
+        label="Тип заказа"
+        rules={[{ required: true, message: "Выберите тип заказа" }]}
+      >
+        <Select>
+          <Option value="office">Офис</Option>
+          <Option value="delivery">Доставка</Option>
+        </Select>
       </Form.Item>
       <Form.Item name="manualDate" label="Дата">
         <DatePicker showTime style={{ width: "100%" }} />
@@ -296,10 +468,42 @@ export const SaleForm = ({
 
       <Row gutter={12}>
         <Col span={12}>
+          <Form.Item name="clientId" label="Клиент из базы">
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="children"
+              placeholder="Выберите клиента (необязательно)"
+            >
+              {clients.map((c) => (
+                <Option key={c.id} value={c.id}>
+                  {c.fullName}
+                  {c.phone ? ` · ${c.phone}` : ""}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+          {selectedClient ? (
+            <div className="text-xs -mt-3 mb-2">
+              <Tag color={selectedClient.level === "vip" ? "purple" : selectedClient.level === "gold" ? "gold" : "default"}>
+                {String(selectedClient.level || "silver").toUpperCase()}
+              </Tag>
+              <Tag color="blue">Скидка: {Number(selectedClient.discountPercent || 0)}%</Tag>
+              <Tag color="gold">
+                ДР +{Number(selectedClient.birthdayDiscountPercent || 0)}%
+              </Tag>
+              <Tag color="green">Кэшбек: {Number(selectedClient.cashbackBalance || 0).toLocaleString()} c</Tag>
+              {selectedClient.bonusesBlocked ? <Tag color="red">Кэшбек заблокирован</Tag> : null}
+            </div>
+          ) : null}
+        </Col>
+        <Col span={12}>
           <Form.Item name="clientName" label="Клиент" rules={[{ required: true }]}> 
             <Input />
           </Form.Item>
         </Col>
+      </Row>
+      <Row gutter={12}>
         <Col span={12}>
           <Form.Item name="branch" label="Филиал" rules={[{ required: true }]}>
             <Select disabled={!isAdmin}>
@@ -311,17 +515,59 @@ export const SaleForm = ({
             </Select>
           </Form.Item>
         </Col>
+        <Col span={12}>
+          <Form.Item
+            name="cashbackToUse"
+            label="Списать кэшбек"
+            tooltip="Списание кэшбека уменьшает сумму чека"
+          >
+            <InputNumber
+              min={0}
+              max={
+                selectedClient && !selectedClient.bonusesBlocked
+                  ? Number(selectedClient.cashbackBalance || 0)
+                  : 0
+              }
+              disabled={!selectedClient || !!selectedClient.bonusesBlocked}
+              style={{ width: "100%" }}
+            />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Row gutter={12}>
+        <Col span={12}>
+          <Form.Item
+            name="clientPhone"
+            label="Телефон клиента"
+            normalize={(value) => normalizeIntlPhone(value)}
+            rules={[
+              {
+                validator: (_rule, value) => {
+                  const needPhone = form.getFieldValue("saleType") === "office";
+                  if (needPhone && !String(value || "").trim()) {
+                    return Promise.reject(
+                      new Error("Для офисного заказа укажите телефон клиента"),
+                    );
+                  }
+                  return Promise.resolve();
+                },
+              },
+            ]}
+            extra={
+              saleType === "office"
+                ? "Обязательно для проверки клиента в amoCRM"
+                : "Рекомендуется для связи"
+            }
+          >
+            <Input prefix={<PhoneOutlined />} placeholder="+996 XXX XXX XXX" />
+          </Form.Item>
+        </Col>
       </Row>
 
       {saleType === "delivery" && (
         <div className={`p-3 rounded mb-4 border ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>
           <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item name="clientPhone" label="Телефон">
-                <Input prefix={<PhoneOutlined />} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
+            <Col span={24}>
               <Form.Item name="clientAddress" label="Адрес">
                 <Input prefix={<EnvironmentOutlined />} />
               </Form.Item>
@@ -330,15 +576,30 @@ export const SaleForm = ({
           <Row gutter={12} align="middle">
             <Col span={12}>
               <Form.Item name="deliveryCost" label="Стоимость доставки">
-                <InputNumber style={{ width: "100%" }} />
+                <InputNumber
+                  style={{ width: "100%" }}
+                  disabled={includeDelivery}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item label=" " colon={false}>
-                <Checkbox checked={includeDelivery} onChange={(e) => setIncludeDelivery(e.target.checked)}>
-                  Включить в чек
+                <Checkbox
+                  checked={includeDelivery}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setIncludeDelivery(next);
+                    if (next) {
+                      form.setFieldValue("deliveryCost", 0);
+                    }
+                  }}
+                >
+                  Клиент оплачивает доставку (добавить в чек)
                 </Checkbox>
               </Form.Item>
+              <div className="text-xs text-gray-500 -mt-1">
+                Если выключено: доставка за счет компании (будет минус в прибыли).
+              </div>
             </Col>
           </Row>
         </div>
@@ -493,6 +754,23 @@ export const SaleForm = ({
           </Col>
         </Row>
       )}
+
+      <Row gutter={12}>
+        <Col span={24}>
+          <Form.Item
+            name="comment"
+            label="Комментарий"
+            tooltip="Можно указать детали по оплате и другие примечания"
+          >
+            <Input.TextArea
+              rows={2}
+              placeholder="Например: оплата через MBank, клиент просил созвониться вечером..."
+              showCount
+              maxLength={500}
+            />
+          </Form.Item>
+        </Col>
+      </Row>
 
       {paymentType === "booking" && (
         <div className={`p-3 rounded mb-4 border ${isDark ? "bg-gray-800" : "bg-gray-50"}`}>

@@ -14,6 +14,8 @@ type StoreUser = {
   address?: string;
   branchId?: string;
   branchName?: string;
+  managedBranchIds?: string[];
+  managedBranchNames?: string[];
   birthYear?: number;
   birthDate?: string;
   photoUrl?: string;

@@ -13,7 +13,7 @@ import {
   Timeline,
   Typography,
 } from "antd";
-import { PlusOutlined, SendOutlined } from "@ant-design/icons";
+import { PlusOutlined, SendOutlined, WhatsAppOutlined } from "@ant-design/icons";
 import {
   useCreateRepairEvent,
   useCreateRepairTicket,
@@ -22,6 +22,7 @@ import {
   type RepairStatus,
   type RepairTicket,
 } from "../../../hooks/api";
+import { normalizeIntlPhone, toPhoneLink, toWhatsAppLink } from "../../../shared/lib/phone";
 import { useBarcodeScanner } from "../../../shared/lib/useBarcodeScanner";
 
 const STATUS_META: Record<RepairStatus, { label: string; color: string }> = {
@@ -146,7 +147,11 @@ export const RepairsSection = ({
               </Form.Item>
             </Col>
             <Col xs={24} md={8}>
-              <Form.Item name="clientPhone" label="Телефон">
+              <Form.Item
+                name="clientPhone"
+                label="Телефон"
+                normalize={(value) => normalizeIntlPhone(value)}
+              >
                 <Input placeholder="+996 ..." />
               </Form.Item>
             </Col>
@@ -262,7 +267,26 @@ export const RepairsSection = ({
                   </Tag>
                   <Tag>Клиент: {selectedTicket.clientName}</Tag>
                   {selectedTicket.clientPhone ? (
-                    <Tag>Тел: {selectedTicket.clientPhone}</Tag>
+                    <Tag>
+                      Тел: {selectedTicket.clientPhone}
+                      {toWhatsAppLink(selectedTicket.clientPhone) ? (
+                        <a
+                          className="ml-2"
+                          href={toWhatsAppLink(selectedTicket.clientPhone) || "#"}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <WhatsAppOutlined /> WhatsApp
+                        </a>
+                      ) : toPhoneLink(selectedTicket.clientPhone) ? (
+                        <a
+                          className="ml-2"
+                          href={toPhoneLink(selectedTicket.clientPhone) || "#"}
+                        >
+                          Позвонить
+                        </a>
+                      ) : null}
+                    </Tag>
                   ) : null}
                   {selectedTicket.serialNumber ? (
                     <Tag>S/N: {selectedTicket.serialNumber}</Tag>

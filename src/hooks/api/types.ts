@@ -11,6 +11,7 @@ export interface Product extends BaseEntity {
   name: string;
   category: string;
   categories?: string[];
+  branchName?: string;
   barcode?: string;
   costPrice: number;
   sellingPrice: number;
@@ -35,6 +36,8 @@ export interface Manager extends BaseEntity {
   address?: string;
   branchId?: string;
   branchName?: string;
+  managedBranchIds?: string[];
+  managedBranchNames?: string[];
   birthYear?: number;
   birthDate?: string;
   photoUrl?: string;
@@ -55,6 +58,63 @@ export interface Supplier extends BaseEntity {
   name: string;
   contacts?: string;
   address?: string;
+  imageUrl?: string;
+  imageUrls?: string[];
+  videoUrl?: string;
+}
+
+export interface Client extends BaseEntity {
+  fullName: string;
+  phone?: string;
+  birthDate?: string;
+  discountPercent: number;
+  birthdayDiscountPercent: number;
+  level?: "silver" | "gold" | "vip";
+  totalSpent?: number;
+  cashbackRatePercent?: number;
+  cashbackBalance?: number;
+  cashbackExpiryDays?: number;
+  cashbackExpiresAt?: string | null;
+  bonusesBlocked?: boolean;
+  referralCode?: string;
+  referredByClientId?: string;
+  note?: string;
+  isActive: boolean;
+}
+
+export interface ClientLoyaltyTransaction extends BaseEntity {
+  clientId: string;
+  type: "cashback_accrual" | "cashback_spend" | "cashback_expire" | "referral_bonus" | "manual_adjust";
+  amount: number;
+  expiresAt?: string | null;
+  saleId?: string;
+  note?: string;
+}
+
+export interface ClientPromotion extends BaseEntity {
+  clientId?: string;
+  title: string;
+  description?: string;
+  discountPercent: number;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  isActive: boolean;
+}
+
+export interface ClientSmsLog extends BaseEntity {
+  clientId: string;
+  phone: string;
+  message: string;
+  status: "queued" | "sent" | "failed";
+  error?: string;
+}
+
+export interface ClientHistory {
+  client: Client;
+  sales: Sale[];
+  loyalty: ClientLoyaltyTransaction[];
+  sms: ClientSmsLog[];
+  promotions: ClientPromotion[];
 }
 
 export interface Bonus extends BaseEntity {
@@ -87,9 +147,11 @@ export interface Expense extends BaseEntity {
 }
 
 export interface Sale extends BaseEntity {
+  clientId?: string;
   clientName: string;
   clientPhone?: string;
   clientAddress?: string;
+  comment?: string;
   productId: string;
   productName: string;
   supplierSnapshot?: string;
@@ -122,6 +184,10 @@ export interface Sale extends BaseEntity {
   manualDate?: string | null;
   updatedBy?: string;
   deliveryCost?: number;
+  deliveryPaidByCompany?: boolean;
+  loyaltyDiscountPercent?: number;
+  cashbackUsed?: number;
+  cashbackAccrued?: number;
 }
 
 export interface CashShift extends BaseEntity {
@@ -172,6 +238,7 @@ export interface ManagerPayoutBalance {
   earned: number;
   bonuses: number;
   advances: number;
+  managerExpenses?: number;
   available: number;
   maxPayable: number;
   debt: number;
@@ -223,6 +290,7 @@ export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export interface Task extends BaseEntity {
   title: string;
   description?: string;
+  attachmentUrls?: string[];
   assigneeId?: string;
   assigneeName?: string;
   assigneeRole?: string;
@@ -380,4 +448,36 @@ export interface AiMaterialsHelpResult {
     reason?: string;
     url?: string;
   }>;
+}
+
+export interface AiOrderDraftRequest {
+  text: string;
+  locale?: string;
+  branches?: string[];
+  products?: Array<{ id?: string; name?: string; price?: number }>;
+  managers?: Array<{ id?: string; name?: string; role?: string }>;
+  manualPaymentTypes?: string[];
+}
+
+export interface AiOrderDraftResult {
+  source: "llm";
+  draft: {
+    clientName?: string;
+    clientPhone?: string;
+    clientAddress?: string;
+    branchName?: string;
+    productName?: string;
+    quantity?: number;
+    price?: number;
+    saleType?: "office" | "delivery";
+    paymentType?: "cash" | "installment" | "hybrid" | "booking" | "manual";
+    paymentLabel?: string;
+    installmentMonths?: number;
+    deliveryCost?: number;
+    clientPaysDelivery?: boolean;
+    bookingDeposit?: number;
+    bookingBuyout?: number;
+    managerName?: string;
+    comment?: string;
+  };
 }

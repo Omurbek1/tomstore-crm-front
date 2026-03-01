@@ -8,6 +8,8 @@ import type {
   AiMaterialsHelpResult,
   AiMarketingPlanDraftRequest,
   AiMarketingPlanDraftResult,
+  AiOrderDraftRequest,
+  AiOrderDraftResult,
   AiTasksDraftRequest,
   AiTasksDraftResult,
 } from "./types";
@@ -53,5 +55,16 @@ export const useAiMaterialsHelp = () =>
     },
     onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
       message.error(error.response?.data?.message || error.message || "Не удалось получить ответ ИИ по материалам");
+    },
+  });
+
+export const useAiOrderDraft = () =>
+  useMutation({
+    mutationFn: async (payload: AiOrderDraftRequest) => {
+      const { data } = await api.post<AiOrderDraftResult>("/ai/order-draft", payload);
+      return data;
+    },
+    onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
+      message.error(error.response?.data?.message || error.message || "Не удалось распознать заказ через ИИ");
     },
   });

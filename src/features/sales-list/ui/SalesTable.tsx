@@ -1,8 +1,10 @@
 import { Badge, Button, DatePicker, Popconfirm, Radio, Select, Space, Switch, Table, Tag } from "antd";
-import { DeleteOutlined, EditOutlined, RocketOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, RocketOutlined, WhatsAppOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
 import { useMemo } from "react";
+import { deliveryCostExpense } from "../../../shared/lib/sales";
+import { toPhoneLink, toWhatsAppLink } from "../../../shared/lib/phone";
 
 type DeliveryStatusCode =
   | "reserved"
@@ -16,13 +18,17 @@ type SaleLike = {
   id: string;
   createdAt: string;
   manualDate?: string | null;
+  clientName?: string;
+  clientPhone?: string;
   managerId?: string;
   managerName: string;
   productName: string;
   saleType: "office" | "delivery";
   quantity: number;
+  price: number;
   total: number;
   deliveryCost?: number;
+  deliveryPaidByCompany?: boolean;
   discount?: number;
   paymentType: "cash" | "installment" | "hybrid" | "booking" | "manual";
   paymentLabel?: string;
@@ -118,6 +124,32 @@ export const SalesTable = ({
       title: "Дата",
       dataIndex: "manualDate",
       render: (d, r) => formatDate(d || r.createdAt, true),
+    },
+    {
+      title: "Клиент",
+      render: (_, r) => {
+        const waLink = toWhatsAppLink(r.clientPhone, "Здравствуйте!");
+        const phoneLink = toPhoneLink(r.clientPhone);
+        return (
+          <div>
+            <div>{r.clientName || "—"}</div>
+            {r.clientPhone ? (
+              <div className="text-xs text-gray-500 flex items-center gap-2">
+                <span>{r.clientPhone}</span>
+                {waLink ? (
+                  <a href={waLink} target="_blank" rel="noreferrer">
+                    <WhatsAppOutlined /> WhatsApp
+                  </a>
+                ) : phoneLink ? (
+                  <a href={phoneLink}>
+                    Позвонить
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        );
+      },
     },
     {
       title: "Менеджер",
@@ -245,7 +277,7 @@ export const SalesTable = ({
             r.total -
             r.costPriceSnapshot * r.quantity -
             r.managerEarnings -
-            (r.deliveryCost || 0);
+            deliveryCostExpense(r);
           return (
             <span className={p >= 0 ? "text-green-600" : "text-red-500"}>
               {p.toLocaleString()}
@@ -316,4 +348,3 @@ export const SalesTable = ({
     </div>
   );
 };
-

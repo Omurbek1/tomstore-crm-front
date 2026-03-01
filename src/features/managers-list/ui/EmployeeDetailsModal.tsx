@@ -33,11 +33,14 @@ type EmployeeDetails = {
   managerSales: ManagerSale[];
   revenueTotal: number;
   salaryFromSales: number;
+  salaryFromKpi?: number;
+  fixedBase?: number;
   bonusesTotal: number;
   penaltiesTotal: number;
   advancesTotal: number;
   otherExpensesTotal: number;
   finalPayout: number;
+  payoutFromMeta?: number;
   financeHistory: FinanceHistoryItem[];
 };
 
@@ -104,12 +107,50 @@ export const EmployeeDetailsModal = ({
             <Col xs={12} md={6}>
               <Card size="small">
                 <Statistic
-                  title="Итого к выплате"
+                  title="Итого к выплате (текущее)"
+                  value={details.payoutFromMeta ?? details.finalPayout}
+                  suffix="c"
+                  styles={{
+                    content: {
+                      color:
+                        (details.payoutFromMeta ?? details.finalPayout) >= 0
+                          ? "#3f8600"
+                          : "#cf1322",
+                    },
+                  }}
+                />
+              </Card>
+            </Col>
+          </Row>
+
+          <Row gutter={[12, 12]}>
+            <Col xs={12} md={6}>
+              <Card size="small">
+                <Statistic
+                  title="Фикс. база"
+                  value={details.fixedBase || 0}
+                  suffix="c"
+                />
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card size="small">
+                <Statistic
+                  title="KPI начисление"
+                  value={details.salaryFromKpi || 0}
+                  suffix="c"
+                />
+              </Card>
+            </Col>
+            <Col xs={12} md={12}>
+              <Card size="small">
+                <Statistic
+                  title="Расчет к выплате (формула)"
                   value={details.finalPayout}
                   suffix="c"
                   styles={{
                     content: {
-                      color: details.finalPayout >= 0 ? "#3f8600" : "#cf1322",
+                      color: details.finalPayout >= 0 ? "#1677ff" : "#cf1322",
                     },
                   }}
                 />

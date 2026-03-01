@@ -14,12 +14,15 @@ import {
   Table,
   Tag,
   Typography,
+  Upload,
   message,
 } from "antd";
-import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, LinkOutlined, UploadOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import type { ColumnsType } from "antd/es/table";
 import { useAppStore } from "../../../store/appStore";
+import { api, API_BASE_URL } from "../../../api/httpClient";
+import { toSafeMediaUrl } from "../../../security/url";
 import {
   useAiTasksDraft,
   useCreateTask,
@@ -68,6 +71,8 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
   const [assigneeFilter, setAssigneeFilter] = useState<string>("");
   const [aiText, setAiText] = useState("");
   const [aiDraft, setAiDraft] = useState<AiTasksDraftItem[]>([]);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [previewAttachmentUrl, setPreviewAttachmentUrl] = useState<string | null>(null);
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
 
@@ -84,12 +89,30 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
   const aiTasksDraft = useAiTasksDraft();
 
   const tasks = tasksQuery.data?.items || [];
+  const priorityOrder: Record<TaskPriority, number> = {
+    urgent: 0,
+    high: 1,
+    medium: 2,
+    low: 3,
+  };
+  const sortTasks = (items: Task[]) =>
+    [...items].sort((a, b) => {
+      const pa = priorityOrder[a.priority] ?? 99;
+      const pb = priorityOrder[b.priority] ?? 99;
+      if (pa !== pb) return pa - pb;
+
+      const da = a.deadline ? dayjs(a.deadline).valueOf() : Number.POSITIVE_INFINITY;
+      const db = b.deadline ? dayjs(b.deadline).valueOf() : Number.POSITIVE_INFINITY;
+      if (da !== db) return da - db;
+
+      return dayjs(b.createdAt).valueOf() - dayjs(a.createdAt).valueOf();
+    });
   const activeTasks = useMemo(
-    () => tasks.filter((t) => t.status !== "done"),
+    () => sortTasks(tasks.filter((t) => t.status !== "done")),
     [tasks],
   );
   const doneTasks = useMemo(
-    () => tasks.filter((t) => t.status === "done"),
+    () => sortTasks(tasks.filter((t) => t.status === "done")),
     [tasks],
   );
 
@@ -134,6 +157,30 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
       render: (v: TaskPriority) => (
         <Tag color={PRIORITY_META[v].color}>{PRIORITY_META[v].label}</Tag>
       ),
+    },
+    {
+      title: "Документы",
+      dataIndex: "attachmentUrls",
+      width: 200,
+      render: (v?: string[]) =>
+        Array.isArray(v) && v.length > 0 ? (
+          <Space size={4} wrap>
+            {v.slice(0, 2).map((url, idx) => (
+              <Button
+                key={`${url}-${idx}`}
+                size="small"
+                type="link"
+                icon={<LinkOutlined />}
+                onClick={() => setPreviewAttachmentUrl(url)}
+              >
+                Файл {idx + 1}
+              </Button>
+            ))}
+            {v.length > 2 ? <Tag>+{v.length - 2}</Tag> : null}
+          </Space>
+        ) : (
+          "—"
+        ),
     },
     {
       title: "Статус",
@@ -183,10 +230,11 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
                   title: t.title,
                   description: t.description,
                   priority: t.priority,
-                  deadline: t.deadline ? dayjs(t.deadline) : null,
-                  assigneeMode: t.assigneeId ? "employee" : "custom",
-                  assigneeId: t.assigneeId,
-                  assigneeName: t.assigneeId ? undefined : t.assigneeName,
+                deadline: t.deadline ? dayjs(t.deadline) : null,
+                attachmentUrls: t.attachmentUrls || [],
+                assigneeMode: t.assigneeId ? "employee" : "custom",
+                assigneeId: t.assigneeId,
+                assigneeName: t.assigneeId ? undefined : t.assigneeName,
                   assigneeRole: t.assigneeId ? undefined : t.assigneeRole,
                 });
               }}
@@ -245,8 +293,92 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
         : undefined,
       createdById: currentUser.id,
       createdByName: currentUser.name,
+      attachmentUrls: [],
     });
   };
+
+  const normalizeUrls = (value?: string[]) =>
+    (Array.isArray(value) ? value : [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean);
+
+  const uploadAttachmentToForm = (targetForm: typeof form) => async (options: any) => {
+    const { file, onSuccess, onError } = options;
+    try {
+      setIsUploadingAttachment(true);
+      const formData = new FormData();
+      formData.append("file", file as File);
+      const { data } = await api.post<{ url: string }>("/uploads/file", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const uploadedUrl = data.url?.startsWith("http")
+        ? data.url
+        : `${API_BASE_URL}${data.url}`;
+      const prev = normalizeUrls(targetForm.getFieldValue("attachmentUrls"));
+      targetForm.setFieldValue("attachmentUrls", [...prev, uploadedUrl]);
+      onSuccess?.(data);
+      message.success("Файл прикреплен");
+    } catch (error) {
+      onError?.(error);
+      message.error("Не удалось загрузить файл");
+    } finally {
+      setIsUploadingAttachment(false);
+    }
+  };
+
+  const renderAttachmentsField = (targetForm: typeof form) => {
+    const urls = normalizeUrls(targetForm.getFieldValue("attachmentUrls"));
+    return (
+      <Form.Item label="Документы / файлы">
+        <Space direction="vertical" style={{ width: "100%" }}>
+          <Upload
+            multiple
+            showUploadList={false}
+            customRequest={uploadAttachmentToForm(targetForm)}
+          >
+            <Button icon={<UploadOutlined />} loading={isUploadingAttachment}>
+              Добавить файл
+            </Button>
+          </Upload>
+          {urls.length ? (
+            <Space direction="vertical" style={{ width: "100%" }}>
+              {urls.map((url, idx) => (
+                <div
+                  key={`${url}-${idx}`}
+                  className="flex items-center justify-between rounded border px-2 py-1"
+                >
+                  <Button type="link" onClick={() => setPreviewAttachmentUrl(url)}>
+                    Файл {idx + 1}
+                  </Button>
+                  <Button
+                    size="small"
+                    danger
+                    onClick={() =>
+                      targetForm.setFieldValue(
+                        "attachmentUrls",
+                        urls.filter((_, i) => i !== idx),
+                      )
+                    }
+                  >
+                    Удалить
+                  </Button>
+                </div>
+              ))}
+            </Space>
+          ) : (
+            <Typography.Text type="secondary">Файлы не добавлены</Typography.Text>
+          )}
+        </Space>
+      </Form.Item>
+    );
+  };
+
+  const previewExt = (() => {
+    if (!previewAttachmentUrl) return "";
+    const plain = previewAttachmentUrl.split("?")[0].toLowerCase();
+    const dot = plain.lastIndexOf(".");
+    return dot >= 0 ? plain.slice(dot + 1) : "";
+  })();
 
   const createAllFromDraft = async () => {
     if (!aiDraft.length) {
@@ -446,6 +578,7 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
                 deadline: v.deadline ? dayjs(v.deadline).toISOString() : undefined,
                 createdById: currentUser.id,
                 createdByName: currentUser.name,
+                attachmentUrls: normalizeUrls(v.attachmentUrls),
               },
               {
                 onSuccess: () => {
@@ -509,6 +642,10 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
           <Form.Item name="deadline" label="Дедлайн">
             <DatePicker style={{ width: "100%" }} />
           </Form.Item>
+          <Form.Item name="attachmentUrls" hidden>
+            <Select mode="tags" />
+          </Form.Item>
+          {renderAttachmentsField(form)}
 
           <Typography.Text type="secondary" className="block mb-3">
             Задачу могут ставить администратор и супер-админ.
@@ -556,6 +693,7 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
                     assigneeMode === "custom"
                       ? String(v.assigneeRole || "").trim()
                       : undefined,
+                  attachmentUrls: normalizeUrls(v.attachmentUrls),
                 },
               },
               {
@@ -623,10 +761,53 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
           <Form.Item name="deadline" label="Дедлайн">
             <DatePicker style={{ width: "100%" }} />
           </Form.Item>
+          <Form.Item name="attachmentUrls" hidden>
+            <Select mode="tags" />
+          </Form.Item>
+          {renderAttachmentsField(editForm)}
           <Button type="primary" htmlType="submit" loading={updateTask.isPending} block>
             Сохранить изменения
           </Button>
         </Form>
+      </Modal>
+
+      <Modal
+        open={!!previewAttachmentUrl}
+        title="Просмотр документа"
+        footer={null}
+        width={980}
+        onCancel={() => setPreviewAttachmentUrl(null)}
+      >
+        {previewAttachmentUrl ? (
+          <div style={{ minHeight: 520 }}>
+            {["png", "jpg", "jpeg", "webp", "gif", "bmp", "svg"].includes(previewExt) ? (
+              <img
+                src={toSafeMediaUrl(previewAttachmentUrl)}
+                alt="task-attachment"
+                className="max-h-[70vh] w-full object-contain rounded"
+              />
+            ) : ["mp4", "webm", "mov", "m4v"].includes(previewExt) ? (
+              <video
+                src={toSafeMediaUrl(previewAttachmentUrl)}
+                controls
+                className="w-full max-h-[70vh] rounded"
+              />
+            ) : ["mp3", "wav", "ogg", "m4a"].includes(previewExt) ? (
+              <audio src={toSafeMediaUrl(previewAttachmentUrl)} controls className="w-full" />
+            ) : (
+              <iframe
+                src={toSafeMediaUrl(previewAttachmentUrl)}
+                title="task-document-preview"
+                style={{ width: "100%", height: "70vh", border: 0 }}
+              />
+            )}
+            <div className="mt-3 text-right">
+              <Button href={toSafeMediaUrl(previewAttachmentUrl)} target="_blank">
+                Открыть в новой вкладке
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

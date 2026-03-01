@@ -2,6 +2,7 @@ import {
   Avatar,
   Button,
   Card,
+  Carousel,
   Col,
   Divider,
   Popconfirm,
@@ -16,7 +17,9 @@ import {
   EnvironmentOutlined,
   PhoneOutlined,
   ShopOutlined,
+  VideoCameraOutlined,
 } from "@ant-design/icons";
+import { toSafeExternalUrl, toSafeMediaUrl } from "../../../security/url";
 
 const { Title, Text } = Typography;
 
@@ -25,6 +28,9 @@ type SupplierItem = {
   name: string;
   contacts?: string;
   address?: string;
+  imageUrl?: string;
+  imageUrls?: string[];
+  videoUrl?: string;
 };
 
 type Props = {
@@ -53,15 +59,40 @@ export const SuppliersSection = ({
         </Button>
       </div>
       <Row gutter={[16, 16]}>
-        {suppliers.map((item) => (
+        {suppliers.map((item) => {
+          const gallery =
+            item.imageUrls && item.imageUrls.length > 0
+              ? item.imageUrls
+              : item.imageUrl
+                ? [item.imageUrl]
+                : [];
+          return (
           <Col xs={24} md={12} xl={8} key={item.id}>
             <Card
               size="small"
               className={`h-full ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"} shadow-sm`}
             >
+              {gallery.length > 0 ? (
+                <Carousel
+                  autoplay={gallery.length > 1}
+                  dots={gallery.length > 1}
+                  className="mb-3 rounded overflow-hidden"
+                >
+                  {gallery.map((url, idx) => (
+                    <div key={`${url}-${idx}`}>
+                      <img
+                        src={toSafeMediaUrl(url)}
+                        alt={`${item.name}-${idx}`}
+                        className="h-40 w-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </Carousel>
+              ) : null}
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <Avatar
+                    src={toSafeMediaUrl(gallery[0])}
                     style={{ backgroundColor: "#1677ff", flexShrink: 0 }}
                     icon={<ShopOutlined />}
                   />
@@ -89,10 +120,23 @@ export const SuppliersSection = ({
                   <EnvironmentOutlined />
                   <span className="truncate">{item.address || "Адрес не указан"}</span>
                 </div>
+                {toSafeExternalUrl(item.videoUrl) ? (
+                  <div className="flex items-center gap-2">
+                    <VideoCameraOutlined />
+                    <a
+                      href={toSafeExternalUrl(item.videoUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Открыть ссылку тура / отеля
+                    </a>
+                  </div>
+                ) : null}
               </div>
             </Card>
           </Col>
-        ))}
+          );
+        })}
       </Row>
       {suppliers.length === 0 && (
         <Card className="mt-3 text-center">

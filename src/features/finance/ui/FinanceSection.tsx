@@ -90,6 +90,7 @@ type MarketingKpiLike = {
   id: string;
   managerId: string;
   managerName: string;
+  managerRole?: string;
   month: string;
   periodStart?: string | null;
   periodEnd?: string | null;
@@ -136,6 +137,18 @@ export const FinanceSection = ({
   formatDate,
   canUploadSalesReport,
 }: Props) => {
+  const isKpiAccrualEligibleRole = (role?: string | null) => {
+    const normalized = String(role || "")
+      .trim()
+      .toLowerCase();
+    if (!normalized) return false;
+    return (
+      normalized !== "manager" &&
+      normalized !== "cashier" &&
+      normalized !== "storekeeper"
+    );
+  };
+
   const [reportRange, setReportRange] = useState<[Dayjs, Dayjs]>([
     dayjs().startOf("month"),
     dayjs().endOf("day"),
@@ -203,6 +216,7 @@ export const FinanceSection = ({
       value.isSame(to, "day") ||
       (value.isAfter(from, "day") && value.isBefore(to, "day"));
     const kpiSalaryAccrued = marketingKpis.reduce((sum, k) => {
+      if (!isKpiAccrualEligibleRole(k.managerRole)) return sum;
       const effectiveDate = dayjs(k.periodEnd || k.periodStart || `${k.month}-01`).endOf("day");
       if (!isInRange(effectiveDate)) return sum;
       if (reportManager !== "all") {
@@ -212,6 +226,7 @@ export const FinanceSection = ({
       return sum + Number(k.salaryTotal || 0);
     }, 0);
     const kpiAutoBonuses = marketingKpis.reduce((sum, k) => {
+      if (!isKpiAccrualEligibleRole(k.managerRole)) return sum;
       const effectiveDate = dayjs(k.periodEnd || k.periodStart || `${k.month}-01`).endOf("day");
       if (!isInRange(effectiveDate)) return sum;
       if (reportManager !== "all") {
@@ -297,6 +312,7 @@ export const FinanceSection = ({
       value.isSame(to, "day") ||
       (value.isAfter(from, "day") && value.isBefore(to, "day"));
     marketingKpis.forEach((k) => {
+      if (!isKpiAccrualEligibleRole(k.managerRole)) return;
       const effectiveDate = dayjs(k.periodEnd || k.periodStart || `${k.month}-01`).endOf("day");
       if (!isInRange(effectiveDate)) return;
       const name = k.managerName || "Не указан";

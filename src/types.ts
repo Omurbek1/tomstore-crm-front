@@ -85,6 +85,7 @@ export interface Sale extends BaseEntity {
   clientName: string;
   clientPhone?: string;
   clientAddress?: string;
+  comment?: string;
   productId: string;
   product: string;
   supplierSnapshot?: string;
@@ -106,4 +107,6 @@ export interface Sale extends BaseEntity {
   bookingDeposit?: number | null;
   manualDate?: Date | null;
   updatedBy?: string;
+  deliveryCost?: number;
+  deliveryPaidByCompany?: boolean;
 }

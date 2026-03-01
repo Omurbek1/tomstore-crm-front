@@ -28,6 +28,7 @@ import type {
   Sale,
 } from "../../../hooks/api/types";
 import { formatDate } from "../../../shared/lib/format";
+import { deliveryCostExpense } from "../../../shared/lib/sales";
 import { useAppStore } from "../../../store/appStore";
 import { AnalyticsChart } from "./AnalyticsChart";
 
@@ -262,7 +263,7 @@ export const Dashboard = ({
           (s.total -
             s.costPriceSnapshot * s.quantity -
             s.managerEarnings -
-            (s.deliveryCost || 0))
+            deliveryCostExpense(s))
         );
       }, 0) - totalExp;
     const avgCheck = filteredSales.length > 0 ? totalRev / filteredSales.length : 0;
@@ -364,7 +365,7 @@ export const Dashboard = ({
             (s.total -
               s.costPriceSnapshot * s.quantity -
               s.managerEarnings -
-              (s.deliveryCost || 0)),
+              deliveryCostExpense(s)),
           0,
         );
         return {

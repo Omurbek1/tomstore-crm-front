@@ -17,6 +17,7 @@ type ManagerPayoutMeta = {
   earned: number;
   bonuses: number;
   advances: number;
+  managerExpenses?: number;
   available: number;
   maxPayable: number;
   debt: number;
@@ -86,6 +87,11 @@ export const FinanceAccrualModal = ({
                 Бонус от компании не ограничен балансом менеджера.
               </Typography.Text>
             )}
+            {(selectedMeta.managerExpenses || 0) > 0 ? (
+              <div className="mt-1 text-xs text-orange-500">
+                Удержания по расходам: {(selectedMeta.managerExpenses || 0).toLocaleString()} c
+              </div>
+            ) : null}
             {selectedMeta.debt < 0 ? (
               <Alert
                 className="mt-2"

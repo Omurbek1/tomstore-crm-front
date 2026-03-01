@@ -32,6 +32,8 @@ import {
   useBonuses,
   useBranches,
   useCreateBranch,
+  useCreateClient,
+  useCreateClientPromotion,
   useCreateManager,
   useCreateMaterial,
   useCreateMaterialFolder,
@@ -42,6 +44,8 @@ import {
   useCreateTarget,
   useCreateTransaction,
   useDeleteBranch,
+  useDeleteClient,
+  useDeleteClientPromotion,
   useDeleteManager,
   useDeleteMaterial,
   useDeleteMaterialFolder,
@@ -50,6 +54,9 @@ import {
   useDeleteTarget,
   useDeletedManagers,
   useExpenses,
+  useClients,
+  useClientHistory,
+  useClientPromotions,
   useImportProducts,
   useIssueTargetReward,
   useMarketingKpi,
@@ -64,6 +71,8 @@ import {
   useSuppliers,
   useTargets,
   useUpdateAppSettings,
+  useUpdateClient,
+  useSendClientSms,
   useUpdateManager,
   useUpdateMaterial,
   useUpdateProduct,
@@ -75,6 +84,7 @@ import { toSafeMediaUrl } from "../security/url";
 import { formatBirthDate, formatDate, formatPhone } from "../shared/lib/format";
 import { isValidKgPhone, normalizeKgPhone } from "../shared/lib/phone";
 import { isDirectVideoFile, toVideoEmbedUrl } from "../shared/lib/media";
+import { deliveryCostExpense } from "../shared/lib/sales";
 import {
   formatMovementQty,
   getAvailableStock,
@@ -113,6 +123,8 @@ import { SalaryHistoryModal } from "../features/managers-list/ui/SalaryHistoryMo
 import { MapAddressPickerModal } from "../features/suppliers/ui/MapAddressPickerModal";
 import { ExpenseForm } from "../features/expenses/ui/ExpenseForm";
 import { SaleForm } from "../features/sales-form/ui/SaleForm";
+import { ClientsSection } from "../features/clients/ui/ClientsSection";
+import { ClientModal } from "../features/clients/ui/ClientModal";
 
 const Dashboard = lazy(() =>
   import("../features/dashboard/ui/Dashboard").then((m) => ({
@@ -249,6 +261,8 @@ interface Manager extends BaseEntity {
   address?: string;
   branchId?: string;
   branchName?: string;
+  managedBranchIds?: string[];
+  managedBranchNames?: string[];
   birthYear?: number;
   birthDate?: string;
   photoUrl?: string;
@@ -269,6 +283,19 @@ interface Supplier extends BaseEntity {
   name: string;
   contacts?: string;
   address?: string;
+  imageUrl?: string;
+  imageUrls?: string[];
+  videoUrl?: string;
+}
+
+interface Client extends BaseEntity {
+  fullName: string;
+  phone?: string;
+  birthDate?: string;
+  discountPercent: number;
+  birthdayDiscountPercent: number;
+  note?: string;
+  isActive: boolean;
 }
 
 interface BonusTarget extends BaseEntity {
@@ -294,9 +321,11 @@ interface Expense extends BaseEntity {
 }
 
 interface Sale extends BaseEntity {
+  clientId?: string;
   clientName: string;
   clientPhone?: string;
   clientAddress?: string;
+  comment?: string;
   productId: string;
   productName: string;
   supplierSnapshot?: string;
@@ -325,6 +354,8 @@ interface Sale extends BaseEntity {
   manualDate?: string | null;
   updatedBy?: string;
   deliveryCost?: number;
+  deliveryPaidByCompany?: boolean;
+  loyaltyDiscountPercent?: number;
 }
 
 // --- DERIVED TYPES ---
@@ -384,6 +415,17 @@ const AppContent = () => {
     isCashier && !isAdmin && !isStorekeeper && !hasRole("manager");
   const canAccessWarehouse = isAdmin || isStorekeeper;
   const canStorekeeperManageProducts = isAdmin || !!user?.canManageProducts;
+  const isKpiAccrualEligibleRole = (role?: string | null) => {
+    const normalized = String(role || "")
+      .trim()
+      .toLowerCase();
+    if (!normalized) return false;
+    return (
+      normalized !== "manager" &&
+      normalized !== "cashier" &&
+      normalized !== "storekeeper"
+    );
+  };
   const SALARY_REASON_PREFIX = "SALARY::";
   const BONUS_REASON_PREFIX = "BONUS::";
   const TARGET_BONUS_REASON_PREFIX = "TARGET_BONUS::";
@@ -435,6 +477,10 @@ const AppContent = () => {
   const { data: bonuses = [] } = useBonuses();
   const { data: expenses = [] } = useExpenses();
   const { data: suppliers = [] } = useSuppliers();
+  const { data: clients = [] } = useClients();
+  const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
+  const clientHistoryQuery = useClientHistory(selectedClientId);
+  const clientPromotionsQuery = useClientPromotions(selectedClientId);
   const { data: targets = [] } = useTargets();
   const { data: marketingKpiPage } = useMarketingKpi({
     limit: 1000,
@@ -463,8 +509,14 @@ const AppContent = () => {
   const deleteManager = useDeleteManager();
   const restoreManager = useRestoreManager();
   const createSupplier = useCreateSupplier();
+  const createClient = useCreateClient();
   const updateSupplier = useUpdateSupplier();
+  const updateClient = useUpdateClient();
   const deleteSupplier = useDeleteSupplier();
+  const deleteClient = useDeleteClient();
+  const createClientPromotion = useCreateClientPromotion();
+  const deleteClientPromotion = useDeleteClientPromotion();
+  const sendClientSms = useSendClientSms();
   const createTarget = useCreateTarget();
   const deleteTarget = useDeleteTarget();
   const issueTargetReward = useIssueTargetReward();
@@ -478,6 +530,7 @@ const AppContent = () => {
   const [isExpenseModal, setExpenseModal] = useState(false);
   const [isManagerModal, setManagerModal] = useState(false);
   const [isSupplierModal, setSupplierModal] = useState(false);
+  const [isClientModal, setClientModal] = useState(false);
   const [isBranchModal, setBranchModal] = useState(false);
   const [branchDetails, setBranchDetails] = useState<Branch | null>(null);
   const [isMapAddressModal, setMapAddressModal] = useState(false);
@@ -487,6 +540,7 @@ const AppContent = () => {
   const [isMaterialFolderModal, setMaterialFolderModal] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isUploadingManagerPhoto, setIsUploadingManagerPhoto] = useState(false);
+  const [isUploadingSupplierImage, setIsUploadingSupplierImage] = useState(false);
   const [isUploadingCompanyLogo, setIsUploadingCompanyLogo] = useState(false);
   const [isUploadingMaterialFile, setIsUploadingMaterialFile] = useState(false);
   const [previewMaterial, setPreviewMaterial] =
@@ -508,6 +562,7 @@ const AppContent = () => {
   const [productForm] = Form.useForm();
   const [managerForm] = Form.useForm();
   const [supplierForm] = Form.useForm();
+  const [clientForm] = Form.useForm();
   const [branchForm] = Form.useForm();
   const [companyForm] = Form.useForm();
 
@@ -524,7 +579,7 @@ const AppContent = () => {
   const managerPhotoUrl = Form.useWatch("photoUrl", managerForm);
 
   const [editingItem, setEditingItem] = useState<
-    Sale | Product | Manager | Supplier | BonusTarget | TrainingMaterial | null
+    Sale | Product | Manager | Supplier | Client | BonusTarget | TrainingMaterial | null
   >(null);
   const materialsPageData: PaginatedMaterials = materialsData || {
     items: [],
@@ -641,9 +696,30 @@ const AppContent = () => {
 
   useEffect(() => {
     if (isSupplierModal) {
-      supplierForm.setFieldsValue((editingItem as Supplier) || {});
+      const current = (editingItem as Supplier) || {};
+      supplierForm.setFieldsValue({
+        ...current,
+        imageUrls:
+          current.imageUrls && current.imageUrls.length > 0
+            ? current.imageUrls
+            : current.imageUrl
+              ? [current.imageUrl]
+              : [],
+      });
     }
   }, [isSupplierModal, editingItem, supplierForm]);
+
+  useEffect(() => {
+    if (isClientModal) {
+      const current = (editingItem as Client) || {};
+      clientForm.setFieldsValue({
+        ...current,
+        birthDate: current.birthDate ? dayjs(current.birthDate) : undefined,
+      });
+    } else {
+      clientForm.resetFields();
+    }
+  }, [isClientModal, editingItem, clientForm]);
 
   useEffect(() => {
     if (!appSettings || activeTab !== "6") return;
@@ -660,6 +736,12 @@ const AppContent = () => {
       const resolvedBranchId =
         current.branchId ||
         branches.find((b) => b.name === current.branchName)?.id;
+      const resolvedManagedBranchIds =
+        current.managedBranchIds && current.managedBranchIds.length > 0
+          ? current.managedBranchIds
+          : resolvedBranchId
+            ? [resolvedBranchId]
+            : [];
       managerForm.setFieldsValue({
         ...current,
         roles:
@@ -671,6 +753,7 @@ const AppContent = () => {
         salaryType: current.salaryType || "commission",
         fixedMonthlySalary: Number(current.fixedMonthlySalary || 0),
         branchId: resolvedBranchId,
+        managedBranchIds: resolvedManagedBranchIds,
         birthDate: current.birthDate
           ? dayjs(current.birthDate)
           : current.birthYear
@@ -734,6 +817,36 @@ const AppContent = () => {
       onError?.(error);
     } finally {
       setIsUploadingManagerPhoto(false);
+    }
+  };
+
+  const uploadSupplierImage = async (options: any) => {
+    const { file, onSuccess, onError } = options;
+    try {
+      setIsUploadingSupplierImage(true);
+      const formData = new FormData();
+      formData.append("file", file as File);
+      const { data } = await api.post<{ url: string }>(
+        "/uploads/image",
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        },
+      );
+      const imageUrl = data.url?.startsWith("http")
+        ? data.url
+        : `${API_BASE_URL}${data.url}`;
+      const prev =
+        (supplierForm.getFieldValue("imageUrls") as string[] | undefined) || [];
+      const next = [...prev, imageUrl];
+      supplierForm.setFieldValue("imageUrls", next);
+      supplierForm.setFieldValue("imageUrl", next[0]);
+      onSuccess?.(data);
+    } catch (error) {
+      message.error("Ошибка загрузки фото поставщика");
+      onError?.(error);
+    } finally {
+      setIsUploadingSupplierImage(false);
     }
   };
 
@@ -823,6 +936,7 @@ const AppContent = () => {
     const managerId = salaryHistoryManager.id || managerById?.id;
     const salaryType = managerById?.salaryType || "commission";
     const fixedMonthlySalary = Number(managerById?.fixedMonthlySalary || 0);
+    const includeKpiInSalary = isKpiAccrualEligibleRole(managerById?.role);
 
     const byManager = (id?: string, name?: string) => {
       return (entryId?: string, entryName?: string) =>
@@ -839,15 +953,17 @@ const AppContent = () => {
         title: `ЗП с продажи: ${s.productName}`,
         amount: s.managerEarnings,
       }));
-    const kpiItems = marketingKpis
-      .filter((k) => match(k.managerId, k.managerName))
-      .map((k) => ({
-        key: `kpi-${k.id}`,
-        date: getKpiEffectiveDate(k),
-        type: "sale" as const,
-        title: `Авто KPI начисление (${k.month})`,
-        amount: Number(k.salaryTotal || 0),
-      }));
+    const kpiItems = includeKpiInSalary
+      ? marketingKpis
+          .filter((k) => match(k.managerId, k.managerName))
+          .map((k) => ({
+            key: `kpi-${k.id}`,
+            date: getKpiEffectiveDate(k),
+            type: "sale" as const,
+            title: `Авто KPI начисление (${k.month})`,
+            amount: Number(k.salaryTotal || 0),
+          }))
+      : [];
 
     const bonusItems = bonuses
       .filter((b) => isSalaryPayoutReason(b.reason))
@@ -873,17 +989,40 @@ const AppContent = () => {
         title: `${e.category}${e.comment ? `: ${e.comment}` : ""}`,
         amount: e.amount,
       }));
+    const expenseItems = expenses
+      .filter(
+        (e) =>
+          e.category !== "Аванс" &&
+          e.category !== "Штраф" &&
+          match(e.managerId, e.managerName),
+      )
+      .map((e) => ({
+        key: `exp-other-${e.id}`,
+        date: e.createdAt,
+        type: "expense" as const,
+        title: `${e.category}${e.comment ? `: ${e.comment}` : ""}`,
+        amount: e.amount,
+      }));
 
-    const items = [...salesItems, ...kpiItems, ...bonusItems, ...advanceItems].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-    );
+    const items = [
+      ...salesItems,
+      ...kpiItems,
+      ...bonusItems,
+      ...advanceItems,
+      ...expenseItems,
+    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-    const baseSalary = [...salesItems, ...kpiItems].reduce(
+    const variableBase = [...salesItems, ...kpiItems].reduce(
       (sum, i) => sum + i.amount,
       0,
     );
+    const baseSalary =
+      salaryType === "fixed" ? fixedMonthlySalary + variableBase : variableBase;
     const bonusesTotal = bonusItems.reduce((sum, i) => sum + i.amount, 0);
-    const advancesTotal = advanceItems.reduce((sum, i) => sum + i.amount, 0);
+    const advancesTotal = [...advanceItems, ...expenseItems].reduce(
+      (sum, i) => sum + i.amount,
+      0,
+    );
     const total = baseSalary - bonusesTotal - advancesTotal;
 
     return {
@@ -896,13 +1035,21 @@ const AppContent = () => {
       advancesTotal,
       total,
     };
-  }, [salaryHistoryManager, managers, sales, bonuses, expenses, marketingKpis]);
+  }, [
+    salaryHistoryManager,
+    managers,
+    sales,
+    bonuses,
+    expenses,
+    marketingKpis,
+  ]);
 
   const employeeDetails = useMemo(() => {
     if (!employeeDetailsManager) return null;
 
     const managerId = employeeDetailsManager.id;
     const managerName = employeeDetailsManager.name;
+    const includeKpiInSalary = isKpiAccrualEligibleRole(employeeDetailsManager.role);
     const match = (entryId?: string, entryName?: string) =>
       entryId === managerId || entryName === managerName;
 
@@ -921,13 +1068,15 @@ const AppContent = () => {
         (a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
-    const managerKpiRows = marketingKpis
-      .filter((k) => match(k.managerId, k.managerName))
-      .sort(
-        (a, b) =>
-          new Date(getKpiEffectiveDate(b)).getTime() -
-          new Date(getKpiEffectiveDate(a)).getTime(),
-      );
+    const managerKpiRows = includeKpiInSalary
+      ? marketingKpis
+          .filter((k) => match(k.managerId, k.managerName))
+          .sort(
+            (a, b) =>
+              new Date(getKpiEffectiveDate(b)).getTime() -
+              new Date(getKpiEffectiveDate(a)).getTime(),
+          )
+      : [];
 
     const managerExpenses = expenses
       .filter((e) => match(e.managerId, e.managerName))
@@ -954,6 +1103,10 @@ const AppContent = () => {
     const otherExpensesTotal = managerExpenses
       .filter((e) => e.category !== "Аванс" && e.category !== "Штраф")
       .reduce((sum, e) => sum + e.amount, 0);
+    const fixedBase =
+      employeeDetailsManager.salaryType === "fixed"
+        ? Number(employeeDetailsManager.fixedMonthlySalary || 0)
+        : 0;
 
     const revenueTotal = managerSales.reduce((sum, s) => sum + s.total, 0);
     const profitTotal = managerSales.reduce(
@@ -962,16 +1115,22 @@ const AppContent = () => {
         (s.total -
           s.costPriceSnapshot * s.quantity -
           s.managerEarnings -
-          (s.deliveryCost || 0)),
+          deliveryCostExpense(s)),
       0,
     );
 
     const finalPayout =
+      fixedBase +
       salaryFromSales +
       salaryFromKpi -
       bonusesTotal -
       penaltiesTotal -
-      advancesTotal;
+      advancesTotal -
+      otherExpensesTotal;
+    const payoutFromMeta =
+      managerId && managerPayoutMeta[managerId]
+        ? Number(managerPayoutMeta[managerId].available || 0)
+        : finalPayout;
 
     const financeHistory = [
       ...managerBonuses.map((b) => ({
@@ -1003,8 +1162,16 @@ const AppContent = () => {
       revenueTotal,
       profitTotal,
       finalPayout,
+      payoutFromMeta,
     };
-  }, [employeeDetailsManager, sales, bonuses, expenses, marketingKpis]);
+  }, [
+    employeeDetailsManager,
+    sales,
+    bonuses,
+    expenses,
+    marketingKpis,
+    managerPayoutMeta,
+  ]);
 
   const ownerAvailableBranches = useMemo(() => {
     const names = new Set<string>([
@@ -1050,13 +1217,19 @@ const AppContent = () => {
 
   const ownerFilteredKpi = useMemo(() => {
     return marketingKpis.filter((k) => {
+      if (!isKpiAccrualEligibleRole(k.managerRole)) return false;
       if (!inOwnerRange(getKpiEffectiveDate(k))) return false;
       if (!ownerBranchFilterSet) return true;
       const branch =
         k.branchName || (k.managerId ? managerBranchById.get(k.managerId) : undefined);
       return !!branch && ownerBranchFilterSet.has(branch);
     });
-  }, [marketingKpis, ownerBranchFilterSet, ownerRange, managerBranchById]);
+  }, [
+    marketingKpis,
+    ownerBranchFilterSet,
+    ownerRange,
+    managerBranchById,
+  ]);
 
   const ownerFilteredBonuses = useMemo(() => {
     return bonuses.filter((b) => {
@@ -1101,7 +1274,7 @@ const AppContent = () => {
         (s.total -
           s.costPriceSnapshot * s.quantity -
           s.managerEarnings -
-          (s.deliveryCost || 0)),
+          deliveryCostExpense(s)),
       0,
     );
     const expensesTotal = ownerFilteredCompanyExpenses.reduce(
@@ -1165,7 +1338,7 @@ const AppContent = () => {
             (s.total -
               s.costPriceSnapshot * s.quantity -
               s.managerEarnings -
-              (s.deliveryCost || 0)),
+              deliveryCostExpense(s)),
           0,
         );
         return {
@@ -1195,7 +1368,10 @@ const AppContent = () => {
     return sourceManagers
       .map((m) => {
         const ms = ownerFilteredSales.filter((s) => s.managerId === m.id);
-        const mk = ownerFilteredKpi.filter((k) => k.managerId === m.id);
+        const includeKpiInSalary = isKpiAccrualEligibleRole(m.role);
+        const mk = includeKpiInSalary
+          ? ownerFilteredKpi.filter((k) => k.managerId === m.id)
+          : [];
         const mb = ownerFilteredSalaryPayouts.filter((b) => b.managerId === m.id);
         const me = ownerFilteredExpenses.filter((e) => e.managerId === m.id);
         const revenue = ms.reduce((sum, s) => sum + s.total, 0);
@@ -1212,9 +1388,7 @@ const AppContent = () => {
           0,
         );
         const bonusesTotal = mb.reduce((sum, b) => sum + b.amount, 0);
-        const deductions = me
-          .filter((e) => e.category === "Аванс" || e.category === "Штраф")
-          .reduce((sum, e) => sum + e.amount, 0);
+        const deductions = me.reduce((sum, e) => sum + Number(e.amount || 0), 0);
         const fixed =
           m.salaryType === "fixed" ? Number(m.fixedMonthlySalary || 0) : 0;
         const accruedSalary = fixed + salaryFromSales + salaryFromKpi;
@@ -1382,6 +1556,17 @@ const AppContent = () => {
                 className={appTheme === "dark" ? "text-white" : "text-gray-800"}
               >
                 Поставщики
+              </p>
+            ),
+          },
+          {
+            key: "16",
+            icon: <TeamOutlined />,
+            label: (
+              <p
+                className={appTheme === "dark" ? "text-white" : "text-gray-800"}
+              >
+                Клиенты
               </p>
             ),
           },
@@ -1786,6 +1971,42 @@ const AppContent = () => {
               />
             </Suspense>
           )}
+          {activeTab === "16" && isAdmin && (
+            <ClientsSection
+              clients={clients}
+              selectedClientId={selectedClientId}
+              history={clientHistoryQuery.data}
+              historyLoading={clientHistoryQuery.isLoading}
+              promotions={clientPromotionsQuery.data || []}
+              formatDate={formatDate}
+              formatPhone={formatPhone}
+              onCreate={() => {
+                setEditingItem(null);
+                setClientModal(true);
+              }}
+              onEdit={(client) => {
+                setEditingItem(client as Client);
+                setClientModal(true);
+              }}
+              onDelete={(id) =>
+                deleteClient.mutate(id, {
+                  onSuccess: () => {
+                    if (selectedClientId === id) setSelectedClientId(undefined);
+                  },
+                })
+              }
+              onSelectClient={(client) => setSelectedClientId(client.id)}
+              onCreatePromotion={async (payload) => {
+                await createClientPromotion.mutateAsync(payload);
+              }}
+              onDeletePromotion={async (id) => {
+                await deleteClientPromotion.mutateAsync(id);
+              }}
+              onSendSms={async ({ id, message }) => {
+                await sendClientSms.mutateAsync({ id, message });
+              }}
+            />
+          )}
           {activeTab === "8" && isAdmin && (
             <Suspense fallback={sectionLoadingFallback}>
               <BranchesSection
@@ -2010,6 +2231,7 @@ const AppContent = () => {
           products={products}
           branches={branches}
           managers={managers}
+          clients={clients.filter((c) => c.isActive)}
           isAdmin={isAdmin}
           currentUser={user}
           isDark={appTheme === "dark"}
@@ -2106,6 +2328,18 @@ const AppContent = () => {
         }}
         onSubmit={(v) => {
           const selectedBranch = branches.find((b) => b.id === v.branchId);
+          const selectedManagedBranchIds = Array.isArray(v.managedBranchIds)
+            ? Array.from(
+                new Set(
+                  v.managedBranchIds
+                    .map((value) => String(value || "").trim())
+                    .filter(Boolean),
+                ),
+              )
+            : [];
+          const selectedManagedBranches = branches.filter((b) =>
+            selectedManagedBranchIds.includes(b.id),
+          );
           let normalizedRoles = Array.from(
             new Set(
               [...(v.roles || []), v.role].filter((role): role is Role =>
@@ -2126,6 +2360,7 @@ const AppContent = () => {
             v.salaryType === "fixed" || normalizedRoles.includes("cashier")
               ? ("fixed" as const)
               : ("commission" as const);
+          const hasSuperadminRole = normalizedRoles.includes("superadmin");
           const payload = {
             ...v,
             role: normalizedRole,
@@ -2142,6 +2377,12 @@ const AppContent = () => {
               : undefined,
             branchId: selectedBranch?.id,
             branchName: selectedBranch?.name,
+            managedBranchIds: hasSuperadminRole
+              ? selectedManagedBranchIds
+              : undefined,
+            managedBranchNames: hasSuperadminRole
+              ? selectedManagedBranches.map((b) => b.name)
+              : undefined,
           };
           if (editingItem) {
             updateManager.mutate({ id: editingItem.id, data: payload });
@@ -2157,6 +2398,8 @@ const AppContent = () => {
         open={isSupplierModal}
         isEditing={!!editingItem}
         form={supplierForm}
+        isUploadingImage={isUploadingSupplierImage}
+        onUploadImage={uploadSupplierImage}
         onCancel={() => {
           setSupplierModal(false);
           supplierForm.resetFields();
@@ -2172,6 +2415,27 @@ const AppContent = () => {
           setSupplierModal(false);
           supplierForm.resetFields();
           setEditingItem(null);
+        }}
+      />
+
+      <ClientModal
+        open={isClientModal}
+        title={editingItem ? "Редактировать клиента" : "Новый клиент"}
+        form={clientForm}
+        onCancel={() => {
+          setClientModal(false);
+          setEditingItem(null);
+          clientForm.resetFields();
+        }}
+        onSubmit={(v) => {
+          if (editingItem) {
+            updateClient.mutate({ id: editingItem.id, data: v });
+          } else {
+            createClient.mutate(v);
+          }
+          setClientModal(false);
+          setEditingItem(null);
+          clientForm.resetFields();
         }}
       />
 
