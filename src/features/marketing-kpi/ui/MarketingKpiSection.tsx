@@ -14,7 +14,9 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
   Typography,
+  message,
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import type { ColumnsType } from "antd/es/table";
@@ -22,11 +24,16 @@ import {
   useCreateMarketingKpi,
   useAiAnalyze,
   useAiMarketingPlanDraft,
+  useAiTasksDraft,
+  useCreateTask,
   useMarketingKpi,
+  useMarketingKpiInsights,
   useUpdateMarketingKpi,
+  type AiTasksDraftItem,
   type Manager,
   type MarketingKpi,
 } from "../../../hooks/api";
+import { useAppStore } from "../../../store/appStore";
 
 const { RangePicker } = DatePicker;
 
@@ -60,6 +67,8 @@ type KpiFormValues = {
   }>;
 };
 
+type AutoActionMode = "risk" | "growth" | "sprint";
+
 const PLAN_ITEM_TYPES = [
   { label: "Пост", value: "post" },
   { label: "Рилс", value: "reels" },
@@ -82,6 +91,7 @@ const hasMarketingRole = (manager: Manager) => {
 };
 
 export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
+  const user = useAppStore((s) => s.user);
   const [month, setMonth] = useState(dayjs().format("YYYY-MM"));
   const [search, setSearch] = useState("");
   const [performerSource, setPerformerSource] = useState<"all" | "system" | "external">("all");
@@ -90,13 +100,20 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<MarketingKpi | null>(null);
   const [aiPlanText, setAiPlanText] = useState("");
+  const [aiRiskTasks, setAiRiskTasks] = useState<AiTasksDraftItem[]>([]);
+  const [aiRiskTasksTitle, setAiRiskTasksTitle] = useState("Задачи по рискам");
+  const [autoActionMode, setAutoActionMode] = useState<AutoActionMode>("risk");
   const [form] = Form.useForm<KpiFormValues>();
+  const formValues = Form.useWatch([], form);
 
   const kpiQuery = useMarketingKpi({ month, q: search, limit: 200, offset: 0 });
+  const insightsQuery = useMarketingKpiInsights({ month, q: search });
   const createKpi = useCreateMarketingKpi();
   const updateKpi = useUpdateMarketingKpi();
+  const createTask = useCreateTask();
   const aiAnalyze = useAiAnalyze();
   const aiMarketingPlanDraft = useAiMarketingPlanDraft();
+  const aiTasksDraft = useAiTasksDraft();
   const [aiReport, setAiReport] = useState<{
     source: "llm";
     summary: string;
@@ -104,17 +121,18 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
     opportunities: string[];
     recommendations: string[];
   } | null>(null);
+  const marketingManagers = useMemo(() => managers.filter(hasMarketingRole), [managers]);
 
   const managerOptions = useMemo(
     () =>
       [
-        ...managers.filter(hasMarketingRole).map((m) => ({
+        ...marketingManagers.map((m) => ({
           value: m.id,
           label: `${m.name}${m.role ? ` (${m.role})` : ""}`,
         })),
         { value: "__external__", label: "Внешний исполнитель (вручную)" },
       ],
-    [managers],
+    [marketingManagers],
   );
 
   const filteredRows = useMemo(() => {
@@ -183,6 +201,7 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
   }, [filteredRows.length, aiInsights.low.length, aiInsights.high.length, aiInsights.avgKpi]);
 
   const runAiAnalysis = async () => {
+    const insights = insightsQuery.data;
     const result = await aiAnalyze.mutateAsync({
       domain: "marketing",
       locale: "ru",
@@ -192,6 +211,12 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
         lowCount: aiInsights.low.length,
         highCount: aiInsights.high.length,
         total: filteredRows.length,
+        healthScore: Number(insights?.healthScore || 0),
+        planCompletion: Number(insights?.totals.planCompletion || 0),
+        checklistCompletion: Number(insights?.totals.checklistCompletion || 0),
+        trendKpiDelta: Number(insights?.trend.kpiDelta || 0),
+        trendErDelta: Number(insights?.trend.erDelta || 0),
+        trendPlanDelta: Number(insights?.trend.planCompletionDelta || 0),
       },
     });
     setAiReport(result);
@@ -281,6 +306,407 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
     a.download = `marketing-report-${month}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const describeAlertDecision = (alert: {
+    level: "critical" | "warning" | "success" | "info";
+  }) => {
+    if (alert.level === "critical") {
+      return "Решение: срочно запускать 7-дневный корректирующий план и ежедневный контроль выполнения.";
+    }
+    if (alert.level === "warning") {
+      return "Решение: добавить точечные задачи на неделю и зафиксировать ответственного по каждой.";
+    }
+    if (alert.level === "success") {
+      return "Решение: закрепить успешный подход как стандарт и масштабировать на команду.";
+    }
+    return "Решение: собрать данные по периоду и назначить базовые контрольные задачи.";
+  };
+
+  const alertLevelWeight = (level: "critical" | "warning" | "success" | "info") => {
+    if (level === "critical") return 0;
+    if (level === "warning") return 1;
+    if (level === "success") return 2;
+    return 3;
+  };
+
+  const sortedAlerts = useMemo(() => {
+    const list = insightsQuery.data?.alerts || [];
+    return [...list].sort((a, b) => alertLevelWeight(a.level) - alertLevelWeight(b.level));
+  }, [insightsQuery.data?.alerts]);
+
+  const groupedDraftTasks = useMemo(() => {
+    const groups: Record<"critical" | "warning" | "growth", AiTasksDraftItem[]> = {
+      critical: [],
+      warning: [],
+      growth: [],
+    };
+    aiRiskTasks.forEach((task) => {
+      const text = `${task.title || ""} ${task.description || ""}`.toLowerCase();
+      const hasGrowthMarker =
+        text.includes("рост") ||
+        text.includes("масштаб") ||
+        text.includes("тест") ||
+        text.includes("улучш");
+      const group =
+        autoActionMode === "growth"
+          ? "growth"
+          : autoActionMode === "sprint" && hasGrowthMarker
+            ? "growth"
+            : task.priority === "urgent" || task.priority === "high"
+              ? "critical"
+              : task.priority === "medium"
+                ? "warning"
+                : "growth";
+      groups[group].push(task);
+    });
+    return groups;
+  }, [aiRiskTasks, autoActionMode]);
+
+  const kpiPreview = useMemo(() => {
+    const v = (formValues || {}) as KpiFormValues;
+    const plannedPosts = Number(v.plannedPosts || 0);
+    const plannedReels = Number(v.plannedReels || 0);
+    const publishedPosts = Number(v.publishedPosts || 0);
+    const publishedReels = Number(v.publishedReels || 0);
+    const reach = Number(v.reach || 0);
+    const engagements = Number(v.engagements || 0);
+    const followersGrowth = Number(v.followersGrowth || 0);
+    const salaryBase = Number(v.salaryBase || 0);
+    const planItems = Array.isArray(v.planItems) ? v.planItems : [];
+    const doneItems = planItems.filter((x) => !!x?.done).length;
+
+    const totalPlanned = plannedPosts + plannedReels;
+    const totalPublished = publishedPosts + publishedReels;
+    const planRateByVolume = totalPlanned > 0 ? totalPublished / totalPlanned : 0;
+    const checklistRate = planItems.length > 0 ? doneItems / planItems.length : 0;
+    const planRate =
+      planItems.length > 0 && totalPlanned > 0
+        ? checklistRate * 0.6 + planRateByVolume * 0.4
+        : planItems.length > 0
+          ? checklistRate
+          : planRateByVolume;
+
+    const erPercent = reach > 0 ? (engagements / reach) * 100 : 0;
+    const planScore = Math.min(130, planRate * 100);
+    const erScore = Math.min(130, (erPercent / 10) * 100);
+    const growthScore = Math.min(130, (followersGrowth / 1000) * 100);
+    const kpiScore = planScore * 0.5 + erScore * 0.3 + growthScore * 0.2;
+
+    let adjustRate = 0;
+    if (kpiScore >= 110) adjustRate = 0.2;
+    else if (kpiScore >= 95) adjustRate = 0.1;
+    else if (kpiScore >= 80) adjustRate = 0.03;
+    else if (kpiScore < 60) adjustRate = -0.2;
+    else if (kpiScore < 70) adjustRate = -0.1;
+    else if (kpiScore < 80) adjustRate = -0.05;
+
+    const salaryBonus = salaryBase * adjustRate;
+    const salaryTotal = salaryBase + salaryBonus;
+    const missingBaseData =
+      !v.managerId ||
+      !v.month ||
+      (v.planMode === "week" && (!v.period || !v.period[0] || !v.period[1]));
+
+    return {
+      kpiScore: Number(kpiScore.toFixed(2)),
+      erPercent: Number(erPercent.toFixed(2)),
+      planRate: Number((planRate * 100).toFixed(1)),
+      checklistRate: Number((checklistRate * 100).toFixed(1)),
+      salaryBonus: Number(salaryBonus.toFixed(2)),
+      salaryTotal: Number(salaryTotal.toFixed(2)),
+      missingBaseData,
+      readyHint: missingBaseData
+        ? "Заполните обязательные поля (исполнитель, месяц и период для режима недели)."
+        : "Данные готовы к сохранению.",
+    };
+  }, [formValues]);
+
+  const generateRiskTasksViaAi = async () => {
+    const insights = insightsQuery.data;
+    if (!insights) {
+      message.info("Нет данных контроля для генерации задач.");
+      return;
+    }
+
+    const riskPerformers = insights.performerControl.filter((x) => x.status === "risk");
+    if (insights.alerts.length === 0 && riskPerformers.length === 0) {
+      message.info("Рисков не найдено. Задачи по рискам не требуются.");
+      return;
+    }
+
+    const text = [
+      `Сформируй управленческие задачи по рискам SMM/Marketing за ${insights.month}.`,
+      "Цель: чтобы команда закрыла KPI и контент-план.",
+      `Health score: ${insights.healthScore}`,
+      `Средний KPI: ${insights.totals.avgKpi}`,
+      `Средний ER: ${insights.totals.avgEr}`,
+      `Закрытие плана: ${(insights.totals.planCompletion * 100).toFixed(1)}%`,
+      `Закрытие чеклиста: ${(insights.totals.checklistCompletion * 100).toFixed(1)}%`,
+      "Алерты:",
+      ...insights.alerts.map((a) => `- [${a.level}] ${a.title}: ${a.description}`),
+      "Исполнители в риске:",
+      ...riskPerformers.map(
+        (r) =>
+          `- ${r.managerName}: KPI ${r.kpiScore.toFixed(1)}, ER ${r.erPercent.toFixed(
+            2,
+          )}%, план ${(r.planCompletion * 100).toFixed(1)}%, действие: ${r.nextAction}`,
+      ),
+      "Сделай задачи простыми и понятными для любого сотрудника: что сделать, кто ответственный, срок, приоритет.",
+    ].join("\n");
+
+    const result = await aiTasksDraft.mutateAsync({
+      text,
+      locale: "ru",
+      assignees: managers.map((m) => ({ id: m.id, name: m.name, role: m.role })),
+    });
+
+    const tasks = result.tasks || [];
+    setAiRiskTasksTitle("Задачи по рискам");
+    setAutoActionMode("risk");
+    setAiRiskTasks(tasks);
+    if (tasks.length === 0) {
+      message.info("ИИ не предложил задачи. Уточните данные периода.");
+    } else {
+      message.success(`ИИ подготовил задач по рискам: ${tasks.length}`);
+    }
+  };
+
+  const generateGrowthTasksViaAi = async () => {
+    const insights = insightsQuery.data;
+    if (!insights) {
+      message.info("Нет данных контроля для генерации задач роста.");
+      return;
+    }
+
+    const strongPerformers = insights.performerControl.filter((x) => x.status === "strong");
+    const successAlerts = insights.alerts.filter((x) => x.level === "success");
+    if (strongPerformers.length === 0 && successAlerts.length === 0) {
+      message.info("Явных точек роста не найдено. Добавьте больше KPI-данных.");
+      return;
+    }
+
+    const text = [
+      `Сформируй задачи по масштабированию роста SMM/Marketing за ${insights.month}.`,
+      "Цель: закрепить сильные практики и увеличить результат в следующем периоде.",
+      `Health score: ${insights.healthScore}`,
+      `Средний KPI: ${insights.totals.avgKpi}`,
+      `Средний ER: ${insights.totals.avgEr}`,
+      `Тренд KPI к прошлому месяцу: ${insights.trend.kpiDelta >= 0 ? "+" : ""}${insights.trend.kpiDelta}`,
+      "Позитивные сигналы:",
+      ...successAlerts.map((a) => `- ${a.title}: ${a.description}`),
+      "Сильные исполнители:",
+      ...strongPerformers.map(
+        (r) =>
+          `- ${r.managerName}: KPI ${r.kpiScore.toFixed(1)}, ER ${r.erPercent.toFixed(
+            2,
+          )}%, план ${(r.planCompletion * 100).toFixed(1)}%`,
+      ),
+      "Нужны практичные задачи: репликация лучших форматов, стандартизация, A/B тесты, контроль внедрения.",
+    ].join("\n");
+
+    const result = await aiTasksDraft.mutateAsync({
+      text,
+      locale: "ru",
+      assignees: managers.map((m) => ({ id: m.id, name: m.name, role: m.role })),
+    });
+    const tasks = result.tasks || [];
+    setAiRiskTasksTitle("Задачи по росту");
+    setAutoActionMode("growth");
+    setAiRiskTasks(tasks);
+    if (tasks.length === 0) {
+      message.info("ИИ не предложил задачи роста. Уточните данные периода.");
+    } else {
+      message.success(`ИИ подготовил задач по росту: ${tasks.length}`);
+    }
+  };
+
+  const generateWeeklySprintPlanViaAi = async () => {
+    const insights = insightsQuery.data;
+    if (!insights) {
+      message.info("Нет данных контроля для генерации недельного плана.");
+      return;
+    }
+
+    const sprintStart = dayjs().format("YYYY-MM-DD");
+    const sprintEnd = dayjs().add(6, "day").format("YYYY-MM-DD");
+    const text = [
+      `Собери управленческий sprint-план на 7 дней (${sprintStart}..${sprintEnd}) для SMM/Marketing.`,
+      "План должен быть понятным любому сотруднику: что сделать, зачем, кто отвечает, срок, приоритет.",
+      "Нужен баланс: исправление рисков + масштабирование роста.",
+      `Health score: ${insights.healthScore}`,
+      `Средний KPI: ${insights.totals.avgKpi}`,
+      `Средний ER: ${insights.totals.avgEr}`,
+      `Закрытие плана: ${(insights.totals.planCompletion * 100).toFixed(1)}%`,
+      `Закрытие чеклиста: ${(insights.totals.checklistCompletion * 100).toFixed(1)}%`,
+      "Алерты:",
+      ...insights.alerts.map((a) => `- [${a.level}] ${a.title}: ${a.description}`),
+      "Контроль по исполнителям:",
+      ...insights.performerControl.map(
+        (r) =>
+          `- ${r.managerName}: статус=${r.status}, KPI ${r.kpiScore.toFixed(
+            1,
+          )}, план ${(r.planCompletion * 100).toFixed(1)}%, действие=${r.nextAction}`,
+      ),
+      "Сделай до 12 задач: ежедневные контрольные точки, контент-план, проверка ER, ретро и корректировки.",
+    ].join("\n");
+
+    const result = await aiTasksDraft.mutateAsync({
+      text,
+      locale: "ru",
+      assignees: managers.map((m) => ({ id: m.id, name: m.name, role: m.role })),
+    });
+    const tasks = result.tasks || [];
+    setAiRiskTasksTitle("Sprint-план 7 дней");
+    setAutoActionMode("sprint");
+    setAiRiskTasks(tasks);
+    if (tasks.length === 0) {
+      message.info("ИИ не собрал недельный план. Уточните данные периода.");
+    } else {
+      message.success(`ИИ подготовил задач для 7-дневного плана: ${tasks.length}`);
+    }
+  };
+
+  const createTaskFromRiskDraft = async (item: AiTasksDraftItem) => {
+    await createTask.mutateAsync({
+      title: String(item.title || "").trim(),
+      description: String(item.description || "").trim() || undefined,
+      assigneeId: String(item.assigneeId || "").trim() || undefined,
+      assigneeName:
+        !String(item.assigneeId || "").trim() && String(item.assigneeName || "").trim()
+          ? String(item.assigneeName || "").trim()
+          : undefined,
+      assigneeRole:
+        !String(item.assigneeId || "").trim() && String(item.assigneeRole || "").trim()
+          ? String(item.assigneeRole || "").trim()
+          : undefined,
+      priority: item.priority || "medium",
+      deadline: item.deadline
+        ? dayjs(String(item.deadline), "YYYY-MM-DD").isValid()
+          ? dayjs(String(item.deadline), "YYYY-MM-DD").endOf("day").toISOString()
+          : undefined
+        : undefined,
+      createdById: user?.id || "system-ai",
+      createdByName: user?.name || "AI assistant",
+      attachmentUrls: [],
+    });
+  };
+
+  const createAllRiskTasks = async () => {
+    if (!aiRiskTasks.length) {
+      message.info("Сначала сгенерируйте задачи по рискам.");
+      return;
+    }
+    for (const item of aiRiskTasks) {
+      // Sequential create keeps task order predictable for the team.
+      await createTaskFromRiskDraft(item);
+    }
+    setAiRiskTasks([]);
+    message.success("Задачи по рискам созданы.");
+  };
+
+  const createLeaderTemplateTasks = async (mode: "urgent_fix" | "stabilize" | "scale") => {
+    const lead = marketingManagers[0];
+    const assigneeId = lead?.id;
+    const assigneeName = lead?.name || "Команда маркетинга";
+    const assigneeRole = lead?.role || "marketing";
+    const today = dayjs();
+
+    const templates =
+      mode === "urgent_fix"
+        ? [
+            {
+              title: "Антикризисный 7-дневный контент-план",
+              description:
+                "Сформировать ежедневный план публикаций с дедлайнами и ответственными по каждому слоту.",
+              priority: "urgent" as const,
+              deadline: today.add(1, "day"),
+            },
+            {
+              title: "Ежедневный контроль KPI и чеклиста",
+              description:
+                "В конце дня фиксировать: выполненные пункты, причины срыва, корректировки на завтра.",
+              priority: "high" as const,
+              deadline: today.add(2, "day"),
+            },
+            {
+              title: "План восстановления ER",
+              description:
+                "Подготовить 3 теста форматов/CTA и согласовать запуск на ближайшие 3 дня.",
+              priority: "high" as const,
+              deadline: today.add(2, "day"),
+            },
+          ]
+        : mode === "stabilize"
+          ? [
+              {
+                title: "Стандарт качества контента на неделю",
+                description:
+                  "Утвердить единый чеклист перед публикацией: оффер, хук, CTA, формат, время публикации.",
+                priority: "medium" as const,
+                deadline: today.add(3, "day"),
+              },
+              {
+                title: "Недельный ритм отчетности",
+                description:
+                  "Назначить фиксированные точки контроля: понедельник план, среда статус, пятница итог.",
+                priority: "medium" as const,
+                deadline: today.add(3, "day"),
+              },
+              {
+                title: "Корректировка ролей и ответственности",
+                description:
+                  "Зафиксировать кто отвечает за посты, рилс, сторис и аналитику, чтобы не было разрывов.",
+                priority: "medium" as const,
+                deadline: today.add(4, "day"),
+              },
+            ]
+          : [
+              {
+                title: "Масштабирование лучшего контент-формата",
+                description:
+                  "Выделить 2-3 лучших связки и запланировать их тиражирование на следующий период.",
+                priority: "high" as const,
+                deadline: today.add(3, "day"),
+              },
+              {
+                title: "A/B тесты для роста охвата и ER",
+                description:
+                  "Запустить серию тестов по хукам, обложкам и CTA с фиксацией гипотез и результатов.",
+                priority: "medium" as const,
+                deadline: today.add(5, "day"),
+              },
+              {
+                title: "Плейбук роста для команды",
+                description:
+                  "Собрать краткий playbook: что сработало, почему, как повторять без потери качества.",
+                priority: "medium" as const,
+                deadline: today.add(6, "day"),
+              },
+            ];
+
+    for (const item of templates) {
+      await createTask.mutateAsync({
+        title: item.title,
+        description: item.description,
+        assigneeId,
+        assigneeName: assigneeId ? undefined : assigneeName,
+        assigneeRole: assigneeId ? undefined : assigneeRole,
+        priority: item.priority,
+        deadline: item.deadline.endOf("day").toISOString(),
+        createdById: user?.id || "leader-template",
+        createdByName: user?.name || "Руководитель",
+        attachmentUrls: [],
+      });
+    }
+
+    message.success(
+      mode === "urgent_fix"
+        ? "Шаблон «Срочно исправить» добавлен в задачи."
+        : mode === "stabilize"
+          ? "Шаблон «Стабилизировать» добавлен в задачи."
+          : "Шаблон «Масштабировать» добавлен в задачи.",
+    );
   };
 
   const columns: ColumnsType<MarketingKpi> = [
@@ -477,6 +903,257 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
               </div>
             </div>
           ) : null}
+        </Card>
+
+        <Card
+          size="small"
+          className="mb-3"
+          loading={insightsQuery.isLoading}
+          title="Центр контроля SMM / Marketing"
+        >
+          {insightsQuery.data ? (
+            <Space direction="vertical" style={{ width: "100%" }} size={10}>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+                  <Typography.Text type="secondary">Health score</Typography.Text>
+                  <div className="text-xl font-semibold">
+                    {Number(insightsQuery.data.healthScore || 0).toFixed(1)}
+                  </div>
+                </div>
+                <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+                  <Typography.Text type="secondary">Закрытие плана</Typography.Text>
+                  <div className="text-xl font-semibold">
+                    {(Number(insightsQuery.data.totals.planCompletion || 0) * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+                  <Typography.Text type="secondary">Закрытие чеклиста</Typography.Text>
+                  <div className="text-xl font-semibold">
+                    {(Number(insightsQuery.data.totals.checklistCompletion || 0) * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+                  <Typography.Text type="secondary">Тренд KPI к {insightsQuery.data.prevMonth}</Typography.Text>
+                  <div
+                    className={`text-xl font-semibold ${
+                      Number(insightsQuery.data.trend.kpiDelta || 0) >= 0
+                        ? "text-green-600"
+                        : "text-red-500"
+                    }`}
+                  >
+                    {Number(insightsQuery.data.trend.kpiDelta || 0) >= 0 ? "+" : ""}
+                    {Number(insightsQuery.data.trend.kpiDelta || 0).toFixed(2)}
+                  </div>
+                </div>
+              </div>
+
+              {showAlerts && sortedAlerts.length > 0 ? (
+                <Space direction="vertical" style={{ width: "100%" }} size={8}>
+                  <Typography.Text strong>Приоритет решений: critical → warning → рост</Typography.Text>
+                  {sortedAlerts.map((alert) => (
+                    <Alert
+                      key={alert.id}
+                      showIcon
+                      type={
+                        alert.level === "critical"
+                          ? "error"
+                          : alert.level === "warning"
+                            ? "warning"
+                            : alert.level === "success"
+                              ? "success"
+                              : "info"
+                      }
+                      message={`${alert.level.toUpperCase()} · ${alert.title}`}
+                      description={
+                        <div className="space-y-1">
+                          <div>{alert.description}</div>
+                          <div className="text-xs">{describeAlertDecision(alert)}</div>
+                        </div>
+                      }
+                    />
+                  ))}
+                </Space>
+              ) : null}
+
+              <Card
+                size="small"
+                type="inner"
+                title="Режим руководителя"
+                extra={
+                  <Tooltip title="Готовые шаблоны создают задачи сразу в модуле Tasks, без ручной настройки полей.">
+                    <Typography.Text type="secondary">Как это работает?</Typography.Text>
+                  </Tooltip>
+                }
+              >
+                <Space wrap>
+                  <Tooltip title="Когда есть просадка KPI/ER и нужен быстрый антикризисный запуск.">
+                    <Button
+                      danger
+                      onClick={() => createLeaderTemplateTasks("urgent_fix")}
+                      loading={createTask.isPending}
+                    >
+                      Срочно исправить
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="Когда нужно выровнять процесс, дедлайны и командную дисциплину.">
+                    <Button onClick={() => createLeaderTemplateTasks("stabilize")} loading={createTask.isPending}>
+                      Стабилизировать
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="Когда показатели хорошие и цель - ускорить рост за счет лучших практик.">
+                    <Button type="primary" onClick={() => createLeaderTemplateTasks("scale")} loading={createTask.isPending}>
+                      Масштабировать
+                    </Button>
+                  </Tooltip>
+                </Space>
+              </Card>
+
+              <Card
+                size="small"
+                type="inner"
+                title={`Автодействия: ${aiRiskTasksTitle}`}
+                extra={
+                  <Space>
+                    <Tooltip title="AI подготовит задачи для устранения рисков по критичным и warning-алертам.">
+                      <Button onClick={generateRiskTasksViaAi} loading={aiTasksDraft.isPending}>
+                        Создать задачи по рискам (AI)
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="AI подготовит задачи по масштабированию сильных практик и росту метрик.">
+                      <Button onClick={generateGrowthTasksViaAi} loading={aiTasksDraft.isPending}>
+                        Задачи по росту (AI)
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="AI соберет готовый управленческий план на ближайшие 7 дней.">
+                      <Button onClick={generateWeeklySprintPlanViaAi} loading={aiTasksDraft.isPending}>
+                        План 7 дней (AI)
+                      </Button>
+                    </Tooltip>
+                    <Button
+                      onClick={() => {
+                        setAiRiskTasks([]);
+                        setAiRiskTasksTitle("Задачи по рискам");
+                        setAutoActionMode("risk");
+                      }}
+                      disabled={!aiRiskTasks.length}
+                    >
+                      Очистить
+                    </Button>
+                    <Button
+                      type="primary"
+                      onClick={createAllRiskTasks}
+                      loading={createTask.isPending}
+                      disabled={!aiRiskTasks.length}
+                    >
+                      Создать все задачи
+                    </Button>
+                  </Space>
+                }
+              >
+                {aiRiskTasks.length === 0 ? (
+                  <Typography.Text type="secondary">
+                    Нажмите «Создать задачи по рискам (AI)», чтобы сразу получить понятный план действий для команды.
+                  </Typography.Text>
+                ) : (
+                  <Space direction="vertical" style={{ width: "100%" }} size={10}>
+                    {(["critical", "warning", "growth"] as const).map((group) => {
+                      const items = groupedDraftTasks[group];
+                      if (!items.length) return null;
+                      return (
+                        <Card
+                          key={group}
+                          size="small"
+                          type="inner"
+                          title={
+                            group === "critical"
+                              ? `Critical (${items.length})`
+                              : group === "warning"
+                                ? `Warning (${items.length})`
+                                : `Рост (${items.length})`
+                          }
+                        >
+                          <div className="space-y-2">
+                            {items.map((item, idx) => (
+                              <Alert
+                                key={`${group}-${item.title}-${idx}`}
+                                type={
+                                  group === "critical"
+                                    ? "error"
+                                    : group === "warning"
+                                      ? "warning"
+                                      : "success"
+                                }
+                                showIcon
+                                message={`${idx + 1}. ${item.title}`}
+                                description={
+                                  <div className="space-y-1">
+                                    <div>{item.description || "Без описания"}</div>
+                                    <div className="flex flex-wrap gap-2 items-center">
+                                      <Tag>{item.assigneeName || "Без исполнителя"}</Tag>
+                                      <Tag>{item.deadline || "Без дедлайна"}</Tag>
+                                      <Tag>{item.priority || "medium"}</Tag>
+                                      <Button
+                                        size="small"
+                                        type="link"
+                                        onClick={() => createTaskFromRiskDraft(item)}
+                                        loading={createTask.isPending}
+                                      >
+                                        Создать задачу
+                                      </Button>
+                                    </div>
+                                  </div>
+                                }
+                              />
+                            ))}
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </Space>
+                )}
+              </Card>
+
+              <Card size="small" type="inner" title="Контроль по исполнителям">
+                <div className="space-y-2">
+                  {insightsQuery.data.performerControl.slice(0, 8).map((row) => (
+                    <div
+                      key={`${row.managerId}-${row.managerName}`}
+                      className="rounded border border-slate-200 dark:border-slate-700 p-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-medium">{row.managerName}</div>
+                        <Tag
+                          color={
+                            row.status === "risk"
+                              ? "red"
+                              : row.status === "strong"
+                                ? "green"
+                                : "blue"
+                          }
+                        >
+                          {row.status === "risk"
+                            ? "Риск"
+                            : row.status === "strong"
+                              ? "Сильный"
+                              : "Стабильно"}
+                        </Tag>
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-300 mt-1">
+                        KPI {row.kpiScore.toFixed(1)} · ER {row.erPercent.toFixed(2)}% · План{" "}
+                        {(row.planCompletion * 100).toFixed(1)}% · Чеклист{" "}
+                        {(row.checklistCompletion * 100).toFixed(1)}%
+                      </div>
+                      <div className="text-xs mt-1">{row.nextAction}</div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </Space>
+          ) : (
+            <Typography.Text type="secondary">
+              Нет данных центра контроля за выбранный период.
+            </Typography.Text>
+          )}
         </Card>
 
         <Card
@@ -718,11 +1395,20 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
             }
           }}
         >
+          <Alert
+            className="mb-3"
+            type="info"
+            showIcon
+            message="Как заполнить KPI быстро и понятно"
+            description="1) Выберите исполнителя и период. 2) Заполните план/факт и метрики охвата. 3) Проверьте блок «Предпросмотр результата» и только потом сохраните."
+          />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             <Form.Item
               name="managerId"
               label="Исполнитель (SMM/Маркетинг)"
               rules={[{ required: true, message: "Выберите сотрудника" }]}
+              extra="Кто отвечает за результат за выбранный период."
             >
               <Select showSearch optionFilterProp="label" options={managerOptions} />
             </Form.Item>
@@ -730,6 +1416,7 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
               name="month"
               label="Месяц"
               rules={[{ required: true, message: "Укажите месяц" }]}
+              extra="Период отчета KPI."
             >
               <DatePicker picker="month" style={{ width: "100%" }} />
             </Form.Item>
@@ -753,7 +1440,17 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
             }
           </Form.Item>
 
-          <Form.Item name="planMode" label="Режим контент-плана">
+          <Form.Item
+            name="planMode"
+            label={
+              <Space size={6}>
+                <span>Режим контент-плана</span>
+                <Tooltip title="Месяц - общий план за месяц. Неделя - детальный контроль внутри выбранного диапазона.">
+                  <Typography.Text type="secondary">?</Typography.Text>
+                </Tooltip>
+              </Space>
+            }
+          >
             <Radio.Group optionType="button" buttonStyle="solid">
               <Radio.Button value="month">Месяц</Radio.Button>
               <Radio.Button value="week">Неделя</Radio.Button>
@@ -774,10 +1471,55 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
             }
           </Form.Item>
 
-          <Card size="small" title="Контент-план по датам (чеклист)">
+          <Card
+            size="small"
+            title={
+              <Space size={6}>
+                <span>Контент-план по датам (чеклист)</span>
+                <Tooltip title="Здесь фиксируется план публикаций по датам. Отметка done влияет на выполнение плана и KPI.">
+                  <Typography.Text type="secondary">?</Typography.Text>
+                </Tooltip>
+              </Space>
+            }
+          >
             <Form.List name="planItems">
               {(fields, { add, remove }) => (
                 <Space direction="vertical" style={{ width: "100%" }} size={8}>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="Как заполнить чеклист"
+                    description="Добавьте плановые публикации по датам. Когда публикация выполнена, поставьте галочку в колонке «Готово»."
+                  />
+                  <Space wrap>
+                    <Tooltip title="Добавить в план пост на текущую дату.">
+                      <Button
+                        size="small"
+                        type="dashed"
+                        onClick={() => add({ type: "post", done: false, date: dayjs() })}
+                      >
+                        + Пост
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="Добавить в план reels на текущую дату.">
+                      <Button
+                        size="small"
+                        type="dashed"
+                        onClick={() => add({ type: "reels", done: false, date: dayjs() })}
+                      >
+                        + Reels
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="Добавить в план story на текущую дату.">
+                      <Button
+                        size="small"
+                        type="dashed"
+                        onClick={() => add({ type: "story", done: false, date: dayjs() })}
+                      >
+                        + Story
+                      </Button>
+                    </Tooltip>
+                  </Space>
                   {fields.map((field) => (
                     <div key={field.key} className="grid grid-cols-12 gap-2 items-center">
                       <Form.Item
@@ -807,45 +1549,170 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
                       >
                         <Checkbox />
                       </Form.Item>
-                      <Button className="col-span-1" danger onClick={() => remove(field.name)}>
-                        X
+                      <Button
+                        className="col-span-1"
+                        danger
+                        onClick={() => remove(field.name)}
+                      >
+                        Удалить
                       </Button>
                     </div>
                   ))}
-                  <Button type="dashed" onClick={() => add({ type: "other", done: false })}>
+                  <Tooltip title="Добавить произвольный пункт контент-плана.">
+                    <Button type="dashed" onClick={() => add({ type: "other", done: false })}>
                     + Добавить пункт
-                  </Button>
+                    </Button>
+                  </Tooltip>
                 </Space>
               )}
             </Form.List>
           </Card>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
-            <Form.Item name="plannedPosts" label="План постов">
+            <Form.Item
+              name="plannedPosts"
+              label={
+                <Space size={6}>
+                  <span>План постов</span>
+                  <Tooltip title="Сколько постов запланировано на период.">
+                    <Typography.Text type="secondary">?</Typography.Text>
+                  </Tooltip>
+                </Space>
+              }
+            >
               <InputNumber min={0} style={{ width: "100%" }} />
             </Form.Item>
-            <Form.Item name="plannedReels" label="План рилс">
+            <Form.Item
+              name="plannedReels"
+              label={
+                <Space size={6}>
+                  <span>План рилс</span>
+                  <Tooltip title="Сколько reels запланировано на период.">
+                    <Typography.Text type="secondary">?</Typography.Text>
+                  </Tooltip>
+                </Space>
+              }
+            >
               <InputNumber min={0} style={{ width: "100%" }} />
             </Form.Item>
-            <Form.Item name="publishedPosts" label="Факт постов">
+            <Form.Item
+              name="publishedPosts"
+              label={
+                <Space size={6}>
+                  <span>Факт постов</span>
+                  <Tooltip title="Сколько постов реально вышло.">
+                    <Typography.Text type="secondary">?</Typography.Text>
+                  </Tooltip>
+                </Space>
+              }
+            >
               <InputNumber min={0} style={{ width: "100%" }} />
             </Form.Item>
-            <Form.Item name="publishedReels" label="Факт рилс">
+            <Form.Item
+              name="publishedReels"
+              label={
+                <Space size={6}>
+                  <span>Факт рилс</span>
+                  <Tooltip title="Сколько reels реально вышло.">
+                    <Typography.Text type="secondary">?</Typography.Text>
+                  </Tooltip>
+                </Space>
+              }
+            >
               <InputNumber min={0} style={{ width: "100%" }} />
             </Form.Item>
-            <Form.Item name="reach" label="Охват">
+            <Form.Item
+              name="reach"
+              label={
+                <Space size={6}>
+                  <span>Охват</span>
+                  <Tooltip title="Общее число охваченных пользователей за период.">
+                    <Typography.Text type="secondary">?</Typography.Text>
+                  </Tooltip>
+                </Space>
+              }
+            >
               <InputNumber min={0} style={{ width: "100%" }} />
             </Form.Item>
-            <Form.Item name="engagements" label="Вовлечения">
+            <Form.Item
+              name="engagements"
+              label={
+                <Space size={6}>
+                  <span>Вовлечения</span>
+                  <Tooltip title="Лайки, комментарии, сохранения, клики и другие взаимодействия.">
+                    <Typography.Text type="secondary">?</Typography.Text>
+                  </Tooltip>
+                </Space>
+              }
+            >
               <InputNumber min={0} style={{ width: "100%" }} />
             </Form.Item>
-            <Form.Item name="followersGrowth" label="Рост подписчиков">
+            <Form.Item
+              name="followersGrowth"
+              label={
+                <Space size={6}>
+                  <span>Рост подписчиков</span>
+                  <Tooltip title="Сколько новых подписчиков добавилось за период.">
+                    <Typography.Text type="secondary">?</Typography.Text>
+                  </Tooltip>
+                </Space>
+              }
+            >
               <InputNumber min={0} style={{ width: "100%" }} />
             </Form.Item>
-            <Form.Item name="salaryBase" label="Базовая ЗП">
+            <Form.Item
+              name="salaryBase"
+              label={
+                <Space size={6}>
+                  <span>Базовая ЗП</span>
+                  <Tooltip title="Базовая сумма до KPI-корректировки. Итог и корректировка видны в предпросмотре ниже.">
+                    <Typography.Text type="secondary">?</Typography.Text>
+                  </Tooltip>
+                </Space>
+              }
+            >
               <InputNumber min={0} style={{ width: "100%" }} />
             </Form.Item>
           </div>
+
+          <Card size="small" className="mb-3" title="Предпросмотр результата">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+              <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+                <Typography.Text type="secondary">KPI (прогноз)</Typography.Text>
+                <div className="text-lg font-semibold">{kpiPreview.kpiScore.toFixed(2)}</div>
+              </div>
+              <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+                <Typography.Text type="secondary">ER (прогноз)</Typography.Text>
+                <div className="text-lg font-semibold">{kpiPreview.erPercent.toFixed(2)}%</div>
+              </div>
+              <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+                <Typography.Text type="secondary">План / чеклист</Typography.Text>
+                <div className="text-sm font-medium">
+                  {kpiPreview.planRate.toFixed(1)}% / {kpiPreview.checklistRate.toFixed(1)}%
+                </div>
+              </div>
+              <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+                <Typography.Text type="secondary">Итог ЗП (прогноз)</Typography.Text>
+                <div className="text-lg font-semibold">
+                  {kpiPreview.salaryTotal.toLocaleString()} c
+                </div>
+                <div
+                  className={`text-xs ${
+                    kpiPreview.salaryBonus >= 0 ? "text-green-600" : "text-red-500"
+                  }`}
+                >
+                  Корректировка {kpiPreview.salaryBonus >= 0 ? "+" : ""}
+                  {kpiPreview.salaryBonus.toLocaleString()} c
+                </div>
+              </div>
+            </div>
+            <Alert
+              className="mt-2"
+              type={kpiPreview.missingBaseData ? "warning" : "success"}
+              showIcon
+              message={kpiPreview.readyHint}
+            />
+          </Card>
 
           <Form.Item name="note" label="Примечание">
             <Input.TextArea rows={2} />
@@ -859,6 +1726,7 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
             type="primary"
             htmlType="submit"
             loading={createKpi.isPending || updateKpi.isPending}
+            disabled={kpiPreview.missingBaseData}
             block
             className="mt-3"
           >

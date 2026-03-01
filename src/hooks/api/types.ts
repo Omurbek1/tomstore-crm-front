@@ -349,6 +349,52 @@ export interface PaginatedMarketingKpi {
   hasMore: boolean;
 }
 
+export interface MarketingKpiAlert {
+  id: string;
+  level: "critical" | "warning" | "success" | "info";
+  title: string;
+  description: string;
+  managerId?: string;
+  managerName?: string;
+}
+
+export interface MarketingKpiPerformerControl {
+  managerId: string;
+  managerName: string;
+  managerRole?: string;
+  kpiScore: number;
+  erPercent: number;
+  planCompletion: number;
+  checklistCompletion: number;
+  salaryTotal: number;
+  status: "risk" | "stable" | "strong";
+  nextAction: string;
+}
+
+export interface MarketingKpiInsights {
+  month: string;
+  prevMonth: string;
+  healthScore: number;
+  totals: {
+    records: number;
+    avgKpi: number;
+    avgEr: number;
+    planCompletion: number;
+    checklistCompletion: number;
+    totalSalary: number;
+    riskCount: number;
+    strongCount: number;
+  };
+  trend: {
+    kpiDelta: number;
+    erDelta: number;
+    planCompletionDelta: number;
+    salaryDeltaPercent: number;
+  };
+  alerts: MarketingKpiAlert[];
+  performerControl: MarketingKpiPerformerControl[];
+}
+
 export interface AiAnalyzeRequest {
   domain: "sales" | "marketing";
   locale?: string;

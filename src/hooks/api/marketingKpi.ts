@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { useMemo } from "react";
 import { message } from "antd";
 import { api } from "../../api/httpClient";
-import type { MarketingKpi, PaginatedMarketingKpi } from "./types";
+import type { MarketingKpi, MarketingKpiInsights, PaginatedMarketingKpi } from "./types";
 
 export const useMarketingKpi = (params?: {
   month?: string;
@@ -56,6 +56,38 @@ export const useCreateMarketingKpi = () => {
     onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
       message.error(error.response?.data?.message || error.message || "Ошибка сохранения KPI");
     },
+  });
+};
+
+export const useMarketingKpiInsights = (params?: {
+  month?: string;
+  managerId?: string;
+  q?: string;
+}) => {
+  const normalized = useMemo(
+    () => ({
+      month: params?.month || "",
+      managerId: params?.managerId || "",
+      q: params?.q || "",
+    }),
+    [params?.month, params?.managerId, params?.q],
+  );
+
+  return useQuery({
+    queryKey: ["marketing-kpi-insights", normalized],
+    queryFn: async (): Promise<MarketingKpiInsights> => {
+      const { data } = await api.get<MarketingKpiInsights>("/marketing-kpi/insights", {
+        params: {
+          month: normalized.month || undefined,
+          managerId: normalized.managerId || undefined,
+          q: normalized.q || undefined,
+        },
+      });
+      return data;
+    },
+    placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 };
 
