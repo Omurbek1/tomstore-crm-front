@@ -259,6 +259,21 @@ html.dark .app-root .finance-movement-row--income > td {
   background: #1a3a30 !important;
 }
 
+html.dark .leaflet-tile {
+  filter: brightness(0.76) contrast(1.08) saturate(0.82);
+}
+
+html.dark .leaflet-control-zoom a {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-color: #334155;
+}
+
+html.dark .leaflet-control-attribution {
+  background: rgba(15, 23, 42, 0.72);
+  color: #cbd5e1;
+}
+
 html.dark .app-root .finance-movement-row--bonus > td {
   background: #3d2f1f !important;
 }

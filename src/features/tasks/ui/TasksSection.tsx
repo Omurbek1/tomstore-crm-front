@@ -330,7 +330,7 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
     const urls = normalizeUrls(targetForm.getFieldValue("attachmentUrls"));
     return (
       <Form.Item label="Документы / файлы">
-        <Space direction="vertical" style={{ width: "100%" }}>
+        <Space orientation="vertical" style={{ width: "100%" }}>
           <Upload
             multiple
             showUploadList={false}
@@ -345,7 +345,7 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
               {urls.map((url, idx) => (
                 <div
                   key={`${url}-${idx}`}
-                  className="flex items-center justify-between rounded border px-2 py-1"
+                  className="flex items-center justify-between rounded border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/50 px-2 py-1"
                 >
                   <Button type="link" onClick={() => setPreviewAttachmentUrl(url)}>
                     Файл {idx + 1}
@@ -518,7 +518,7 @@ export const TasksSection = ({ managers, currentUser, formatDate }: Props) => {
           scroll={{ x: 980 }}
           rowClassName={(r) =>
             r.priority === "urgent"
-              ? "bg-rose-50 dark:bg-rose-900/20"
+              ? isDark ? "bg-red-900/30 text-slate-100" : "bg-red-50"   
               : r.priority === "high"
                 ? "bg-orange-50 dark:bg-orange-900/20"
                 : ""

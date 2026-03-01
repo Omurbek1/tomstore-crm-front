@@ -44,14 +44,14 @@ type Props = {
 
 export const SuppliersSection = ({
   suppliers,
-  isDark,
+  isDark: _isDark,
   formatPhone,
   onAdd,
   onEdit,
   onDelete,
 }: Props) => {
   return (
-    <div className="animate-fade-in">
+    <div className={`animate-fade-in ${_isDark ? "is-dark" : "is-light"}`}>
       <div className="flex justify-between mb-4">
         <Title level={4}>Поставщики</Title>
         <Button type="primary" onClick={onAdd}>
@@ -70,7 +70,7 @@ export const SuppliersSection = ({
           <Col xs={24} md={12} xl={8} key={item.id}>
             <Card
               size="small"
-              className={`h-full ${isDark ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"} shadow-sm`}
+              className="h-full shadow-sm"
             >
               {gallery.length > 0 ? (
                 <Carousel
@@ -112,11 +112,11 @@ export const SuppliersSection = ({
               </div>
               <Divider style={{ margin: "12px 0" }} />
               <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-gray-500">
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-300">
                   <PhoneOutlined />
                   <span className="truncate">{formatPhone(item.contacts)}</span>
                 </div>
-                <div className="flex items-center gap-2 text-gray-500">
+                <div className="flex items-center gap-2 text-slate-500 dark:text-slate-300">
                   <EnvironmentOutlined />
                   <span className="truncate">{item.address || "Адрес не указан"}</span>
                 </div>
@@ -124,6 +124,7 @@ export const SuppliersSection = ({
                   <div className="flex items-center gap-2">
                     <VideoCameraOutlined />
                     <a
+                      className="text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200"
                       href={toSafeExternalUrl(item.videoUrl)}
                       target="_blank"
                       rel="noreferrer"

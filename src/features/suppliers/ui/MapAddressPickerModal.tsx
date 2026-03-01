@@ -316,14 +316,14 @@ export const MapAddressPickerModal = ({ open, onCancel, onSelect }: Props) => {
           allowClear
         />
         {searchLoading ? (
-          <div className="text-xs text-gray-500">Поиск...</div>
+          <div className="text-xs text-slate-500 dark:text-slate-300">Поиск...</div>
         ) : searchResults.length > 0 ? (
-          <div className="max-h-44 overflow-y-auto rounded border border-gray-200">
+          <div className="max-h-44 overflow-y-auto rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/70">
             {searchResults.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 border-b border-slate-100 dark:border-slate-800 last:border-0 text-slate-700 dark:text-slate-200"
                 onClick={() => {
                   void setMarker(item.lat, item.lng, item.label);
                   setSearchQuery(item.label);
@@ -335,17 +335,23 @@ export const MapAddressPickerModal = ({ open, onCancel, onSelect }: Props) => {
             ))}
           </div>
         ) : null}
-        <div ref={mapContainerRef} style={{ width: "100%", height: 420, borderRadius: 12 }} />
+        <div
+          ref={mapContainerRef}
+          className="border border-slate-200 dark:border-slate-700"
+          style={{ width: "100%", height: 420, borderRadius: 12 }}
+        />
         <Card size="small">
-          <div className="text-xs text-gray-500 mb-1">Выбранная точка</div>
-          <div className="font-semibold">
+          <div className="text-xs text-slate-500 dark:text-slate-300 mb-1">Выбранная точка</div>
+          <div className="font-semibold text-slate-800 dark:text-slate-100">
             {pickedPoint
               ? `${pickedPoint.lat.toFixed(6)}, ${pickedPoint.lng.toFixed(6)}`
               : "Точка не выбрана"}
           </div>
           <Divider style={{ margin: "8px 0" }} />
-          <div className="text-xs text-gray-500 mb-1">Адрес</div>
-          <div>{loadingAddress ? "Поиск адреса..." : pickedAddress || "Пока пусто"}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-300 mb-1">Адрес</div>
+          <div className="text-slate-700 dark:text-slate-200">
+            {loadingAddress ? "Поиск адреса..." : pickedAddress || "Пока пусто"}
+          </div>
         </Card>
       </div>
     </Modal>
