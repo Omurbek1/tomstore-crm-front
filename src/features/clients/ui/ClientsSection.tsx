@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Button,
   Card,
@@ -21,7 +21,6 @@ import type {
   Client,
   ClientHistory,
   ClientPromotion,
-  ClientSmsLog,
   Sale,
   ClientLoyaltyTransaction,
 } from "../../../hooks/api/types";
@@ -43,7 +42,6 @@ type Props = {
   onSelectClient: (client: Client) => void;
   onCreatePromotion: (payload: Partial<ClientPromotion>) => Promise<unknown>;
   onDeletePromotion: (id: string) => Promise<unknown>;
-  onSendSms: (payload: { id: string; message: string }) => Promise<unknown>;
 };
 
 export const ClientsSection = ({
@@ -60,10 +58,8 @@ export const ClientsSection = ({
   onSelectClient,
   onCreatePromotion,
   onDeletePromotion,
-  onSendSms,
 }: Props) => {
   const [promotionForm] = Form.useForm();
-  const [smsText, setSmsText] = useState("");
   const selectedClient = useMemo(
     () => clients.find((c) => c.id === selectedClientId),
     [clients, selectedClientId],
@@ -72,7 +68,7 @@ export const ClientsSection = ({
     if (!selectedClient?.referralCode) return "";
     if (typeof window === "undefined") return `ref:${selectedClient.referralCode}`;
     return `${window.location.origin}?ref=${encodeURIComponent(selectedClient.referralCode)}`;
-  }, [selectedClient?.referralCode]);
+  }, [selectedClient]);
 
   const columns: ColumnsType<Client> = [
     {
@@ -165,25 +161,13 @@ export const ClientsSection = ({
     { title: "Комментарий", dataIndex: "note", render: (v) => v || "—" },
   ];
 
-  const smsColumns: ColumnsType<ClientSmsLog> = [
-    { title: "Дата", dataIndex: "createdAt", render: (v) => formatDate(v, true), width: 170 },
-    { title: "Телефон", dataIndex: "phone", render: (v) => formatPhone(v) },
-    { title: "Сообщение", dataIndex: "message" },
-    {
-      title: "Статус",
-      dataIndex: "status",
-      render: (v) =>
-        v === "sent" ? <Tag color="green">Отправлено</Tag> : v === "failed" ? <Tag color="red">Ошибка</Tag> : <Tag>В очереди</Tag>,
-    },
-  ];
-
   return (
     <div className="animate-fade-in space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <div className="text-lg font-semibold">Клиенты и лояльность</div>
           <Text type="secondary">
-            Уровни Silver/Gold/VIP, персональные скидки, кэшбек, рефералка, акции, SMS.
+            Уровни Silver/Gold/VIP, персональные скидки, кэшбек, рефералка, акции.
           </Text>
         </div>
         <Button type="primary" icon={<PlusOutlined />} onClick={onCreate}>
@@ -347,42 +331,7 @@ export const ClientsSection = ({
                     />
                   </Space>
                 ),
-              },
-              {
-                key: "history-sms",
-                label: "SMS",
-                children: (
-                  <Space direction="vertical" className="w-full" size={12}>
-                    <Space.Compact className="w-full">
-                      <Input
-                        value={smsText}
-                        onChange={(e) => setSmsText(e.target.value)}
-                        placeholder="Текст SMS для клиента"
-                      />
-                      <Button
-                        type="primary"
-                        onClick={async () => {
-                          const text = smsText.trim();
-                          if (!text) return;
-                          await onSendSms({ id: selectedClient.id, message: text });
-                          setSmsText("");
-                          message.success("SMS отправлено (или записано в лог)");
-                        }}
-                      >
-                        Отправить
-                      </Button>
-                    </Space.Compact>
-                    <Table
-                      size="small"
-                      rowKey="id"
-                      columns={smsColumns}
-                      dataSource={history?.sms || []}
-                      pagination={{ pageSize: 8 }}
-                      scroll={{ x: 900 }}
-                    />
-                  </Space>
-                ),
-              },
+              }
             ]}
           />
         </Card>

@@ -19,7 +19,6 @@ type Props = {
     address?: string;
     imageUrl?: string;
     imageUrls?: string[];
-    videoUrl?: string;
   }) => void;
   onOpenMap: () => void;
   onUploadImage: (options: any) => void;
@@ -112,13 +111,6 @@ export const SupplierModal = ({
           </Space>
         </Form.Item>
 
-        <Form.Item
-          name="videoUrl"
-          label="Видео / тур / отель ссылка"
-          tooltip="Например ссылка на YouTube, Instagram, сайт тура или отеля"
-        >
-          <Input placeholder="https://..." />
-        </Form.Item>
         <Form.Item name="imageUrl" hidden>
           <Input />
         </Form.Item>

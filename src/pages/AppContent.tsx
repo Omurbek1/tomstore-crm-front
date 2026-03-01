@@ -72,7 +72,6 @@ import {
   useTargets,
   useUpdateAppSettings,
   useUpdateClient,
-  useSendClientSms,
   useUpdateManager,
   useUpdateMaterial,
   useUpdateProduct,
@@ -516,7 +515,6 @@ const AppContent = () => {
   const deleteClient = useDeleteClient();
   const createClientPromotion = useCreateClientPromotion();
   const deleteClientPromotion = useDeleteClientPromotion();
-  const sendClientSms = useSendClientSms();
   const createTarget = useCreateTarget();
   const deleteTarget = useDeleteTarget();
   const issueTargetReward = useIssueTargetReward();
@@ -2001,9 +1999,6 @@ const AppContent = () => {
               }}
               onDeletePromotion={async (id) => {
                 await deleteClientPromotion.mutateAsync(id);
-              }}
-              onSendSms={async ({ id, message }) => {
-                await sendClientSms.mutateAsync({ id, message });
               }}
             />
           )}

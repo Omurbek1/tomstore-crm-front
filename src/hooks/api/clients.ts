@@ -109,14 +109,3 @@ export const useDeleteClientPromotion = () => {
     },
   });
 };
-
-export const useSendClientSms = () => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, message }: { id: string; message: string }) => {
-      const { data } = await api.post<{ success: boolean }>(`/clients/${id}/sms`, { message });
-      return data;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["client-history"] }),
-  });
-};

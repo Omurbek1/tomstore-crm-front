@@ -17,9 +17,8 @@ import {
   EnvironmentOutlined,
   PhoneOutlined,
   ShopOutlined,
-  VideoCameraOutlined,
 } from "@ant-design/icons";
-import { toSafeExternalUrl, toSafeMediaUrl } from "../../../security/url";
+import { toSafeMediaUrl } from "../../../security/url";
 
 const { Title, Text } = Typography;
 
@@ -30,7 +29,6 @@ type SupplierItem = {
   address?: string;
   imageUrl?: string;
   imageUrls?: string[];
-  videoUrl?: string;
 };
 
 type Props = {
@@ -120,19 +118,6 @@ export const SuppliersSection = ({
                   <EnvironmentOutlined />
                   <span className="truncate">{item.address || "Адрес не указан"}</span>
                 </div>
-                {toSafeExternalUrl(item.videoUrl) ? (
-                  <div className="flex items-center gap-2">
-                    <VideoCameraOutlined />
-                    <a
-                      className="text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200"
-                      href={toSafeExternalUrl(item.videoUrl)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Открыть ссылку тура / отеля
-                    </a>
-                  </div>
-                ) : null}
               </div>
             </Card>
           </Col>

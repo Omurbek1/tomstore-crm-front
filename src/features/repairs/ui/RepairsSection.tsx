@@ -13,7 +13,7 @@ import {
   Timeline,
   Typography,
 } from "antd";
-import { PlusOutlined, SendOutlined, WhatsAppOutlined } from "@ant-design/icons";
+import { PlusOutlined, SendOutlined } from "@ant-design/icons";
 import {
   useCreateRepairEvent,
   useCreateRepairTicket,
@@ -22,7 +22,7 @@ import {
   type RepairStatus,
   type RepairTicket,
 } from "../../../hooks/api";
-import { normalizeIntlPhone, toPhoneLink, toWhatsAppLink } from "../../../shared/lib/phone";
+import { normalizeIntlPhone, toPhoneLink } from "../../../shared/lib/phone";
 import { useBarcodeScanner } from "../../../shared/lib/useBarcodeScanner";
 
 const STATUS_META: Record<RepairStatus, { label: string; color: string }> = {
@@ -269,16 +269,7 @@ export const RepairsSection = ({
                   {selectedTicket.clientPhone ? (
                     <Tag>
                       Тел: {selectedTicket.clientPhone}
-                      {toWhatsAppLink(selectedTicket.clientPhone) ? (
-                        <a
-                          className="ml-2"
-                          href={toWhatsAppLink(selectedTicket.clientPhone) || "#"}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <WhatsAppOutlined /> WhatsApp
-                        </a>
-                      ) : toPhoneLink(selectedTicket.clientPhone) ? (
+                      {toPhoneLink(selectedTicket.clientPhone) ? (
                         <a
                           className="ml-2"
                           href={toPhoneLink(selectedTicket.clientPhone) || "#"}

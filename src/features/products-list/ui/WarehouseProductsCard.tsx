@@ -138,9 +138,7 @@ export const WarehouseProductsCard = ({
     ];
     const csv = [header, ...rows]
       .map((row) =>
-        row
-          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-          .join(";"),
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(";"),
       )
       .join("\n");
 
@@ -273,12 +271,26 @@ export const WarehouseProductsCard = ({
                 <Button icon={<DownloadOutlined />} onClick={downloadTemplate}>
                   Шаблон CSV
                 </Button>
-                <Button icon={<DownloadOutlined />} onClick={onExportProducts}>
-                  Выгрузить все товары
-                </Button>
-                <Button icon={<DownloadOutlined />} onClick={onExportFilteredProducts}>
-                  Выгрузить текущий фильтр{typeof filteredCount === "number" ? ` (${filteredCount})` : ""}
-                </Button>
+                {products.length > 0 && (
+                  <Button
+                    icon={<DownloadOutlined />}
+                    onClick={onExportProducts}
+                  >
+                    Выгрузить все товары
+                  </Button>
+                )}
+                {products.length > 0 && (
+                  <Button
+                    icon={<DownloadOutlined />}
+                    onClick={onExportFilteredProducts}
+                  >
+                    Выгрузить текущий фильтр
+                    {typeof filteredCount === "number"
+                      ? ` (${filteredCount})`
+                      : ""}
+                  </Button>
+                )}
+
                 <Button onClick={onCreateProduct} icon={<PlusOutlined />}>
                   Добавить товар
                 </Button>
@@ -286,68 +298,7 @@ export const WarehouseProductsCard = ({
             )}
           </Space>
         </div>
-        {canManageProducts ? (
-          <Typography.Text type="secondary" className="block mb-2 text-xs">
-            Экспорт фильтра выгружает только товары, которые сейчас видны в таблице
-            {search.trim() ? ` (поиск: "${search.trim()}")` : ""} {branchName ? `· филиал: ${branchName}` : ""}.
-          </Typography.Text>
-        ) : null}
-        {canManageProducts ? (
-          <Card
-            size="small"
-            className="mb-3 warehouse-csv-help"
-            title={<Typography.Text strong>Импорт товаров из CSV</Typography.Text>}
-            extra={
-              <Space size={8}>
-                <Typography.Text type="secondary">
-                  {showImportHelp ? "Скрыть" : "Показать"}
-                </Typography.Text>
-                <Switch
-                  size="small"
-                  checked={showImportHelp}
-                  onChange={setShowImportHelp}
-                />
-              </Space>
-            }
-          >
-            {showImportHelp ? (
-              <>
-                <div className="mt-1">
-                  <Typography.Text type="secondary">
-                    Обязательные колонки:
-                  </Typography.Text>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {REQUIRED_COLUMNS.map((col) => (
-                      <Tag key={col} color="blue">
-                        {col}
-                      </Tag>
-                    ))}
-                  </div>
-                </div>
-                <div className="mt-2">
-                  <Typography.Text type="secondary">
-                    Дополнительные колонки:
-                  </Typography.Text>
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {OPTIONAL_COLUMNS.map((col) => (
-                      <Tag key={col}>{col}</Tag>
-                    ))}
-                  </div>
-                </div>
-                <Alert
-                  className="mt-2"
-                  type="info"
-                  showIcon
-                  title="Поддерживаются разделители: запятая, точка с запятой, таб."
-                />
-              </>
-            ) : (
-              <Typography.Text type="secondary">
-                Подсказка скрыта. Включите тумблер, чтобы показать колонки CSV.
-              </Typography.Text>
-            )}
-          </Card>
-        ) : null}
+
         <Table
           rowKey="id"
           size="small"
@@ -359,14 +310,25 @@ export const WarehouseProductsCard = ({
         {canManageProducts && isLargeList ? (
           <div className="mt-3 p-2 rounded border flex flex-wrap items-center gap-2 justify-between">
             <Typography.Text type="secondary" className="text-xs">
-              Список большой ({products.length} товаров). Быстрые действия экспорта:
+              Список большой ({products.length} товаров). Быстрые действия
+              экспорта:
             </Typography.Text>
             <Space wrap>
-              <Button size="small" icon={<DownloadOutlined />} onClick={onExportProducts}>
+              <Button
+                size="small"
+                icon={<DownloadOutlined />}
+                onClick={onExportProducts}
+              >
                 Все товары
               </Button>
-              <Button size="small" type="primary" icon={<DownloadOutlined />} onClick={onExportFilteredProducts}>
-                Текущий фильтр{typeof filteredCount === "number" ? ` (${filteredCount})` : ""}
+              <Button
+                size="small"
+                type="primary"
+                icon={<DownloadOutlined />}
+                onClick={onExportFilteredProducts}
+              >
+                Текущий фильтр
+                {typeof filteredCount === "number" ? ` (${filteredCount})` : ""}
               </Button>
             </Space>
           </div>

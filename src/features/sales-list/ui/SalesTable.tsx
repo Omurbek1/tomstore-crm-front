@@ -1,10 +1,10 @@
 import { Badge, Button, DatePicker, Popconfirm, Radio, Select, Space, Switch, Table, Tag } from "antd";
-import { DeleteOutlined, EditOutlined, RocketOutlined, WhatsAppOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, RocketOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import dayjs, { type Dayjs } from "dayjs";
 import { useMemo } from "react";
 import { deliveryCostExpense } from "../../../shared/lib/sales";
-import { toPhoneLink, toWhatsAppLink } from "../../../shared/lib/phone";
+import { toPhoneLink } from "../../../shared/lib/phone";
 
 type DeliveryStatusCode =
   | "reserved"
@@ -128,7 +128,6 @@ export const SalesTable = ({
     {
       title: "Клиент",
       render: (_, r) => {
-        const waLink = toWhatsAppLink(r.clientPhone, "Здравствуйте!");
         const phoneLink = toPhoneLink(r.clientPhone);
         return (
           <div>
@@ -136,11 +135,7 @@ export const SalesTable = ({
             {r.clientPhone ? (
               <div className="text-xs text-gray-500 flex items-center gap-2">
                 <span>{r.clientPhone}</span>
-                {waLink ? (
-                  <a href={waLink} target="_blank" rel="noreferrer">
-                    <WhatsAppOutlined /> WhatsApp
-                  </a>
-                ) : phoneLink ? (
+                {phoneLink ? (
                   <a href={phoneLink}>
                     Позвонить
                   </a>
