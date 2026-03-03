@@ -2064,7 +2064,11 @@ const AppContent = () => {
           )}
           {activeTab === "17" && isAdmin && (
             <Suspense fallback={sectionLoadingFallback}>
-              <WorkTimeSection managers={managers} formatDate={formatDate} />
+              <WorkTimeSection
+                managers={managers}
+                formatDate={formatDate}
+                onOpenTasks={() => setActiveTab("13")}
+              />
             </Suspense>
           )}
           {activeTab === "5" && isAdmin && (

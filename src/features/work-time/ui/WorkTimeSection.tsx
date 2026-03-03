@@ -24,8 +24,11 @@ import { DeleteOutlined, EditOutlined, InfoCircleOutlined, PlusOutlined } from "
 import {
   useCreateWorkTimeEntry,
   useDeleteWorkTimeEntry,
+  useRunWorkTimeAutomation,
+  useTasks,
   useUpdateManager,
   useUpdateWorkTimeEntry,
+  useWorkTimeAutomationStatus,
   useWorkTimeEntries,
   useWorkTimeSummary,
   type Manager,
@@ -35,6 +38,7 @@ import {
 type Props = {
   managers: Manager[];
   formatDate: (value?: string | null, withTime?: boolean) => string;
+  onOpenTasks?: () => void;
 };
 
 type WorkTimeFormValues = {
@@ -88,7 +92,7 @@ const getStatusMeta = (entry: WorkTimeEntry) => {
   return { color: "blue", label: "Норма" };
 };
 
-export const WorkTimeSection = ({ managers, formatDate }: Props) => {
+export const WorkTimeSection = ({ managers, formatDate, onOpenTasks }: Props) => {
   const settingsPresets: SettingsPreset[] = [
     {
       key: "standard",
@@ -191,6 +195,13 @@ export const WorkTimeSection = ({ managers, formatDate }: Props) => {
     startDate,
     endDate,
   });
+  const automationStatusQuery = useWorkTimeAutomationStatus();
+  const automationTasksQuery = useTasks({
+    createdById: "system-automation",
+    limit: 5,
+    offset: 0,
+  });
+  const runAutomation = useRunWorkTimeAutomation();
 
   const createEntry = useCreateWorkTimeEntry();
   const updateEntry = useUpdateWorkTimeEntry();
@@ -199,6 +210,7 @@ export const WorkTimeSection = ({ managers, formatDate }: Props) => {
   const entries = entriesQuery.data?.items || [];
   const summary = summaryQuery.data;
   const summaryAll = summaryAllQuery.data;
+  const automationStatus = automationStatusQuery.data;
 
   const managerStatsById = useMemo(() => {
     const map = new Map<
@@ -616,6 +628,104 @@ export const WorkTimeSection = ({ managers, formatDate }: Props) => {
           </div>
         </Card>
       ) : null}
+
+      <Card
+        size="small"
+        title="Автоконтроль системы"
+        extra={
+          <Space>
+            <Tooltip title="Открывает раздел с полным списком задач, включая автозадачи системы.">
+              <Button onClick={onOpenTasks}>Открыть задачи</Button>
+            </Tooltip>
+            <Tooltip title="Ручной запуск автоконтроля: проверка дисциплины и KPI с созданием задач и отчета.">
+              <Button
+                type="primary"
+                loading={runAutomation.isPending}
+                onClick={() => runAutomation.mutate({ force: true })}
+              >
+                Запустить сейчас
+              </Button>
+            </Tooltip>
+          </Space>
+        }
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 text-sm">
+          <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+            <Tooltip title="Время, когда система запускает автоконтроль каждый день.">
+              <Typography.Text type="secondary">Расписание</Typography.Text>
+            </Tooltip>
+            <div className="font-semibold">
+              {automationStatus?.schedule?.runAt || "09:00"} · {automationStatus?.schedule?.timezone || "Asia/Bishkek"}
+            </div>
+          </div>
+          <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+            <Tooltip title="Дата последнего успешного запуска автоконтроля.">
+              <Typography.Text type="secondary">Последний запуск</Typography.Text>
+            </Tooltip>
+            <div className="font-semibold">{automationStatus?.lastRunDate || "еще не запускалось"}</div>
+          </div>
+          <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+            <Tooltip title="Сколько новых задач система создала на последнем запуске по дисциплине и KPI-рискам.">
+              <Typography.Text type="secondary">Создано задач (последний запуск)</Typography.Text>
+            </Tooltip>
+            <div className="font-semibold">
+              {Number(automationStatus?.lastResult?.createdLateTasks || 0) + Number(automationStatus?.lastResult?.createdKpiTasks || 0)}
+            </div>
+          </div>
+          <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
+            <Tooltip title="Текущее состояние процесса автоконтроля.">
+              <Typography.Text type="secondary">Статус</Typography.Text>
+            </Tooltip>
+            <div className="font-semibold">
+              {automationStatus?.inProgress ? "Выполняется" : "Готово"}
+            </div>
+          </div>
+        </div>
+        <Alert
+          className="mt-3"
+          type="info"
+          showIcon
+          message="Что делает автоконтроль"
+          description="Автоматически проверяет дисциплину, KPI-риски, создает задачи по рискам и формирует ежедневный отчет руководителю."
+        />
+
+        <Typography.Text type="secondary" className="block mt-3 mb-2">
+          Последние автозадачи
+        </Typography.Text>
+        <Table
+          size="small"
+          rowKey="id"
+          loading={automationTasksQuery.isLoading}
+          dataSource={automationTasksQuery.data?.items || []}
+          pagination={false}
+          scroll={{ x: 700 }}
+          columns={[
+            {
+              title: <Tooltip title="Название автоматически созданной задачи."><span>Задача</span></Tooltip>,
+              dataIndex: "title",
+              render: (v: string) => <span className="font-medium">{v}</span>,
+            },
+            {
+              title: <Tooltip title="Кому назначена автозадача."><span>Исполнитель</span></Tooltip>,
+              dataIndex: "assigneeName",
+              width: 180,
+              render: (v?: string) => v || "—",
+            },
+            {
+              title: <Tooltip title="Срочность задачи: чем выше, тем быстрее нужно отработать."><span>Приоритет</span></Tooltip>,
+              dataIndex: "priority",
+              width: 110,
+              render: (v: string) => <Tag>{v}</Tag>,
+            },
+            {
+              title: <Tooltip title="Дата и время создания автозадачи системой."><span>Создано</span></Tooltip>,
+              dataIndex: "createdAt",
+              width: 170,
+              render: (v: string) => formatDate(v, true),
+            },
+          ]}
+        />
+      </Card>
 
       <Alert
         type="success"

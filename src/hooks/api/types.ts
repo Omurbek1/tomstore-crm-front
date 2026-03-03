@@ -219,6 +219,29 @@ export interface WorkTimeSummary {
   }>;
 }
 
+export interface WorkTimeAutomationResult {
+  date: string;
+  timezone: string;
+  runAt: string;
+  lateRiskManagers: number;
+  kpiRiskAlerts: number;
+  createdLateTasks: number;
+  createdKpiTasks: number;
+  reportCreated: boolean;
+}
+
+export interface WorkTimeAutomationStatus {
+  schedule: {
+    timezone: string;
+    hour: number;
+    minute: number;
+    runAt: string;
+  };
+  inProgress: boolean;
+  lastRunDate?: string | null;
+  lastResult?: WorkTimeAutomationResult | null;
+}
+
 export interface Expense extends BaseEntity {
   amount: number;
   category: string;

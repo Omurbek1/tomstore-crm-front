@@ -9,6 +9,7 @@ export const useTasks = (params?: {
   status?: TaskStatus;
   priority?: TaskPriority;
   assigneeId?: string;
+  createdById?: string;
   limit?: number;
   offset?: number;
 }) => {
@@ -18,6 +19,7 @@ export const useTasks = (params?: {
       status: params?.status || "",
       priority: params?.priority || "",
       assigneeId: params?.assigneeId || "",
+      createdById: params?.createdById || "",
       limit: params?.limit ?? 100,
       offset: params?.offset ?? 0,
     }),
@@ -26,6 +28,7 @@ export const useTasks = (params?: {
       params?.status,
       params?.priority,
       params?.assigneeId,
+      params?.createdById,
       params?.limit,
       params?.offset,
     ],
@@ -40,6 +43,7 @@ export const useTasks = (params?: {
           status: normalizedParams.status || undefined,
           priority: normalizedParams.priority || undefined,
           assigneeId: normalizedParams.assigneeId || undefined,
+          createdById: normalizedParams.createdById || undefined,
           limit: normalizedParams.limit,
           offset: normalizedParams.offset,
         },

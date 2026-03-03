@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { message } from "antd";
 import { api } from "../../api/httpClient";
-import type { PaginatedWorkTimeEntries, WorkTimeEntry, WorkTimeSummary } from "./types";
+import type {
+  PaginatedWorkTimeEntries,
+  WorkTimeAutomationStatus,
+  WorkTimeEntry,
+  WorkTimeSummary,
+} from "./types";
 
 export const useWorkTimeEntries = (params?: {
   startDate?: string;
@@ -44,6 +49,45 @@ export const useWorkTimeSummary = (params?: {
       return data;
     },
   });
+
+export const useWorkTimeAutomationStatus = () =>
+  useQuery({
+    queryKey: ["work-time-automation-status"],
+    queryFn: async () => {
+      const { data } = await api.get<WorkTimeAutomationStatus>("/work-time/automation/status");
+      return data;
+    },
+    refetchInterval: 60_000,
+  });
+
+export const useRunWorkTimeAutomation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload?: { force?: boolean; date?: string }) => {
+      const { data } = await api.post<{
+        success: boolean;
+        forced: boolean;
+        result: {
+          date: string;
+          createdLateTasks: number;
+          createdKpiTasks: number;
+          reportCreated: boolean;
+        };
+      }>("/work-time/automation/run-daily", payload || { force: true });
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["work-time-automation-status"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      const totalTasks =
+        Number(data?.result?.createdLateTasks || 0) + Number(data?.result?.createdKpiTasks || 0);
+      message.success(`Автоконтроль выполнен: создано задач ${totalTasks}`);
+    },
+    onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
+      message.error(error.response?.data?.message || error.message || "Не удалось запустить автоконтроль");
+    },
+  });
+};
 
 export const useCreateWorkTimeEntry = () => {
   const queryClient = useQueryClient();
