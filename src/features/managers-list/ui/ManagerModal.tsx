@@ -19,7 +19,9 @@ type Role =
   | "admin"
   | "manager"
   | "storekeeper"
-  | "cashier";
+  | "cashier"
+  | "smm"
+  | "marketing";
 
 type Branch = {
   id: string;
@@ -200,6 +202,8 @@ export const ManagerModal = ({
             <Radio value="manager">MGR</Radio>
             <Radio value="storekeeper">STORE</Radio>
             <Radio value="cashier">CASHIER</Radio>
+            <Radio value="smm">SMM</Radio>
+            <Radio value="marketing">MARKETING</Radio>
             {canAssignAdmin ? <Radio value="admin">ADM</Radio> : null}
             {canAssignSuperadmin ? (
               <Radio value="superadmin">SUPER</Radio>
@@ -217,6 +221,8 @@ export const ManagerModal = ({
               { label: "Менеджер", value: "manager" },
               { label: "Склад", value: "storekeeper" },
               { label: "Кассир", value: "cashier" },
+              { label: "SMM", value: "smm" },
+              { label: "Маркетинг", value: "marketing" },
               ...(canAssignAdmin ? [{ label: "Админ", value: "admin" }] : []),
               ...(canAssignSuperadmin
                 ? [{ label: "Superadmin", value: "superadmin" }]

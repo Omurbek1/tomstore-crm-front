@@ -1,5 +1,12 @@
 
-export type Role = "admin" | "manager";
+export type Role =
+  | "superadmin"
+  | "admin"
+  | "manager"
+  | "storekeeper"
+  | "cashier"
+  | "smm"
+  | "marketing";
 export type SaleType = "office" | "delivery";
 export type PaymentType = "cash" | "installment" | "hybrid" | "booking";
 export type DeliveryStatusCode =

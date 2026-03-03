@@ -24,8 +24,23 @@ type ManagerLike = {
   branchName?: string;
   birthDate?: string;
   birthYear?: number;
-  role: "superadmin" | "admin" | "manager" | "storekeeper" | "cashier";
-  roles?: Array<"superadmin" | "admin" | "manager" | "storekeeper" | "cashier">;
+  role:
+    | "superadmin"
+    | "admin"
+    | "manager"
+    | "storekeeper"
+    | "cashier"
+    | "smm"
+    | "marketing";
+  roles?: Array<
+    | "superadmin"
+    | "admin"
+    | "manager"
+    | "storekeeper"
+    | "cashier"
+    | "smm"
+    | "marketing"
+  >;
   salaryType?: "commission" | "fixed";
   fixedMonthlySalary?: number;
   canManageProducts?: boolean;

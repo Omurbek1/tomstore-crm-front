@@ -15,3 +15,4 @@ export * from "./cashShifts";
 export * from "./tasks";
 export * from "./marketingKpi";
 export * from "./ai";
+export * from "./workTime";

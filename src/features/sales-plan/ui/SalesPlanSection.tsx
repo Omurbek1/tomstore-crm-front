@@ -8,6 +8,7 @@ import {
   DatePicker,
   Empty,
   Form,
+  Input,
   InputNumber,
   Modal,
   Popconfirm,
@@ -16,6 +17,7 @@ import {
   Row,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Tooltip,
@@ -30,7 +32,7 @@ import {
   TrophyOutlined,
 } from "@ant-design/icons";
 import { useCreateTarget, useDeleteTarget, useUpdateTarget } from "../../../hooks/api/targets";
-import { useAiAnalyze } from "../../../hooks/api/ai";
+import { useAiAnalyze, useAiSalesPlanDraft } from "../../../hooks/api/ai";
 import type { BonusTarget, Branch, Manager, Sale } from "../../../hooks/api/types";
 
 const { Option } = Select;
@@ -161,11 +163,15 @@ export const SalesPlanSection = ({
   const [editingPlan, setEditingPlan] = useState<BonusTarget | null>(null);
   const [editingTeamPlan, setEditingTeamPlan] = useState<BonusTarget | null>(null);
   const [showAlerts, setShowAlerts] = useState(true);
+  const [showAiAnalysisCard, setShowAiAnalysisCard] = useState(true);
+  const [showAiPlanImportCard, setShowAiPlanImportCard] = useState(true);
+  const [aiSalesPlanText, setAiSalesPlanText] = useState("");
 
   const createTarget = useCreateTarget();
   const updateTarget = useUpdateTarget();
   const deleteTarget = useDeleteTarget();
   const aiAnalyze = useAiAnalyze();
+  const aiSalesPlanDraft = useAiSalesPlanDraft();
   const [aiReport, setAiReport] = useState<{
     source: "llm" | "rule-based";
     summary: string;
@@ -392,6 +398,56 @@ export const SalesPlanSection = ({
     message.success(result.source === "llm" ? "AI анализ (LLM) готов" : "AI анализ готов");
   };
 
+  const applyAiSalesPlanToForms = async () => {
+    const text = String(aiSalesPlanText || "").trim();
+    if (!text) {
+      message.info("Вставьте текст плана продаж");
+      return;
+    }
+
+    const result = await aiSalesPlanDraft.mutateAsync({
+      text,
+      locale: "ru",
+      assignees: scopedManagers.map((m) => ({ id: m.id, name: m.name, role: m.role })),
+    });
+
+    const draft = result.draft;
+    const periodStart = dayjs(draft.periodStart);
+    const periodEnd = dayjs(draft.periodEnd);
+    const period: [Dayjs, Dayjs] =
+      periodStart.isValid() && periodEnd.isValid()
+        ? [periodStart, periodEnd]
+        : [dayjs().startOf("month"), dayjs().endOf("month")];
+
+    if (draft.planType === "team") {
+      teamCreateForm.setFieldsValue({
+        amount: Number(draft.amount || 0),
+        reward: Number(draft.reward || 0),
+        period,
+      });
+      message.success("ИИ заполнил план команды");
+      return;
+    }
+
+    const managerId =
+      draft.managerId && scopedManagers.some((m) => m.id === draft.managerId)
+        ? draft.managerId
+        : undefined;
+
+    createForm.setFieldsValue({
+      managerId,
+      amount: Number(draft.amount || 0),
+      reward: Number(draft.reward || 0),
+      period,
+    });
+
+    if (!managerId) {
+      message.warning("ИИ не смог точно сопоставить менеджера. Выберите менеджера вручную.");
+      return;
+    }
+    message.success("ИИ заполнил план менеджера");
+  };
+
   const handleCreatePlan = async (values: PlanFormValues) => {
     const periodValue = values.period;
     if (!periodValue?.[0] || !periodValue?.[1]) {
@@ -536,6 +592,20 @@ export const SalesPlanSection = ({
         message="Панель РОП: зелёный — план выполнен, синий — в работе, золотой/красный — зона риска."
         description="Сначала поставьте план на команду и менеджеров, затем контролируйте выполнение по карточкам и таблицам."
       />
+      <Space wrap size={16}>
+        <div className="flex items-center gap-2">
+          <Tooltip title="Блок показывает риски выполнения плана, подсказки по коучингу и итоговый AI-отчет по продажам.">
+            <Typography.Text type="secondary">Показывать AI-анализ</Typography.Text>
+          </Tooltip>
+          <Switch size="small" checked={showAiAnalysisCard} onChange={setShowAiAnalysisCard} />
+        </div>
+        <div className="flex items-center gap-2">
+          <Tooltip title="Блок разбирает текст и автозаполняет форму личного или командного плана продаж.">
+            <Typography.Text type="secondary">Показывать ИИ-загрузку плана</Typography.Text>
+          </Tooltip>
+          <Switch size="small" checked={showAiPlanImportCard} onChange={setShowAiPlanImportCard} />
+        </div>
+      </Space>
 
       <Row gutter={[12, 12]}>
         <Col xs={24} sm={12} lg={6}>
@@ -566,72 +636,125 @@ export const SalesPlanSection = ({
         </Col>
       </Row>
 
-      <Card
-        size="small"
-        title="AI-анализ: рост продаж и обучение"
-        extra={
-          <Space>
-            <Button size="small" onClick={() => setShowAlerts((v) => !v)}>
-              {showAlerts ? "Скрыть alerts" : "Показать alerts"}
-            </Button>
-            <Button size="small" onClick={runAiAnalysis} loading={aiAnalyze.isPending}>
-              Проверить ИИ
-            </Button>
-            <Button size="small" onClick={() => setAiReport(null)} disabled={!aiReport}>
-              Очистить
-            </Button>
-          </Space>
-        }
-      >
-        {showAlerts ? (
-          <Alert
-            type="info"
-            showIcon
-            className="mb-2"
-            message="Как читать блок"
-            description="Сначала смотрите менеджеров в зоне риска, затем запускайте ИИ для детального плана действий."
-          />
-        ) : null}
-        {showAlerts && coachingQueue.length === 0 ? (
-          <Alert
-            type="success"
-            showIcon
-            message="Отличная динамика: все менеджеры закрывают план."
-            description="Рекомендуется закрепить практику: ежедневные мини-разборы и обмен лучшими кейсами в команде."
-          />
-        ) : showAlerts ? (
-          <Space direction="vertical" style={{ width: "100%" }} size={8}>
-            {coachingQueue.map((row) => (
-              <Alert
-                key={row.id}
-                type={row.periodPercent < 60 ? "warning" : "info"}
-                showIcon
-                message={`${row.managerName}: ${row.periodPercent}% плана`}
-                description={row.coachHint.text}
-              />
-            ))}
-          </Space>
-        ) : null}
-        <Typography.Text type="secondary" className="mt-2 block">
-          Рекомендуемый процесс: 1) создайте задачу в блоке «Задачи», 2) назначьте дедлайн обучения, 3) проверьте факт через 3-5 дней.
-        </Typography.Text>
-        {aiReport ? (
-          <Card size="small" className="mt-3" type="inner" title="Отчёт ИИ">
+      {showAiAnalysisCard ? (
+        <Card
+          size="small"
+          title={
+            <Space size={6}>
+              <span>AI-анализ: рост продаж и обучение</span>
+              <Tooltip title="Отвечает за оценку динамики плана, выявление рисков и рекомендации по обучению менеджеров.">
+                <InfoCircleOutlined />
+              </Tooltip>
+            </Space>
+          }
+          extra={
+            <Space>
+              <Tooltip title="Показывает/скрывает алерты и подсказки по менеджерам.">
+                <Button size="small" onClick={() => setShowAlerts((v) => !v)}>
+                  {showAlerts ? "Скрыть alerts" : "Показать alerts"}
+                </Button>
+              </Tooltip>
+              <Tooltip title="Запускает анализ выполнения планов и формирует рекомендации по росту и обучению.">
+                <Button size="small" onClick={runAiAnalysis} loading={aiAnalyze.isPending}>
+                  Проверить ИИ
+                </Button>
+              </Tooltip>
+              <Tooltip title="Очищает текущий AI-отчёт в этом блоке.">
+                <Button size="small" onClick={() => setAiReport(null)} disabled={!aiReport}>
+                  Очистить
+                </Button>
+              </Tooltip>
+            </Space>
+          }
+        >
+          {showAlerts ? (
+            <Alert
+              type="info"
+              showIcon
+              className="mb-2"
+              message="Как читать блок"
+              description="Сначала смотрите менеджеров в зоне риска, затем запускайте ИИ для детального плана действий."
+            />
+          ) : null}
+          {showAlerts && coachingQueue.length === 0 ? (
+            <Alert
+              type="success"
+              showIcon
+              message="Отличная динамика: все менеджеры закрывают план."
+              description="Рекомендуется закрепить практику: ежедневные мини-разборы и обмен лучшими кейсами в команде."
+            />
+          ) : showAlerts ? (
             <Space direction="vertical" style={{ width: "100%" }} size={8}>
-              <Alert type="info" showIcon message={aiReport.summary} />
-              {aiReport.risks.map((item, idx) => (
-                <Alert key={`risk-${idx}`} type="warning" showIcon message={item} />
-              ))}
-              {aiReport.opportunities.map((item, idx) => (
-                <Alert key={`opp-${idx}`} type="success" showIcon message={item} />
-              ))}
-              {aiReport.recommendations.map((item, idx) => (
-                <Alert key={`rec-${idx}`} type="info" showIcon message={item} />
+              {coachingQueue.map((row) => (
+                <Alert
+                  key={row.id}
+                  type={row.periodPercent < 60 ? "warning" : "info"}
+                  showIcon
+                  message={`${row.managerName}: ${row.periodPercent}% плана`}
+                  description={row.coachHint.text}
+                />
               ))}
             </Space>
-          </Card>
-        ) : null}
-      </Card>
+          ) : null}
+          <Typography.Text type="secondary" className="mt-2 block">
+            Рекомендуемый процесс: 1) создайте задачу в блоке «Задачи», 2) назначьте дедлайн обучения, 3) проверьте факт через 3-5 дней.
+          </Typography.Text>
+          {aiReport ? (
+            <Card size="small" className="mt-3" type="inner" title="Отчёт ИИ">
+              <Space direction="vertical" style={{ width: "100%" }} size={8}>
+                <Alert type="info" showIcon message={aiReport.summary} />
+                {aiReport.risks.map((item, idx) => (
+                  <Alert key={`risk-${idx}`} type="warning" showIcon message={item} />
+                ))}
+                {aiReport.opportunities.map((item, idx) => (
+                  <Alert key={`opp-${idx}`} type="success" showIcon message={item} />
+                ))}
+                {aiReport.recommendations.map((item, idx) => (
+                  <Alert key={`rec-${idx}`} type="info" showIcon message={item} />
+                ))}
+              </Space>
+            </Card>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {showAiPlanImportCard ? (
+        <Card
+          size="small"
+          title={
+            <Space size={6}>
+              <span>ИИ: загрузить план продаж из текста</span>
+              <Tooltip title="Отвечает за преобразование свободного текста в структурированный план и автозаполнение формы.">
+                <InfoCircleOutlined />
+              </Tooltip>
+            </Space>
+          }
+          extra={
+            <Space>
+              <Tooltip title="Преобразует текст в черновик плана и подставляет данные в нужную форму.">
+                <Button onClick={applyAiSalesPlanToForms} loading={aiSalesPlanDraft.isPending}>
+                  Разобрать и заполнить
+                </Button>
+              </Tooltip>
+              <Tooltip title="Очищает поле текста для нового запроса.">
+                <Button onClick={() => setAiSalesPlanText("")} disabled={!aiSalesPlanText}>
+                  Очистить
+                </Button>
+              </Tooltip>
+            </Space>
+          }
+        >
+          <Input.TextArea
+            rows={4}
+            value={aiSalesPlanText}
+            onChange={(e) => setAiSalesPlanText(e.target.value)}
+            placeholder="Пример: На март поставить Ахмату план 450000 сом, бонус 25000, период с 2026-03-01 по 2026-03-31. Для команды на март план 2200000, бонус 90000."
+          />
+          <Typography.Text type="secondary" className="block mt-2">
+            ИИ распознает личный или командный план и заполнит соответствующую форму постановки плана.
+          </Typography.Text>
+        </Card>
+      ) : null}
 
       <Card size="small" title="План команды (РОП)">
         {hasAdminAccess && (
@@ -662,14 +785,16 @@ export const SalesPlanSection = ({
                 <RangePicker allowClear={false} />
               </Form.Item>
               <Form.Item>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  icon={<PlusOutlined />}
-                  loading={createTarget.isPending}
-                >
-                  Поставить план команды
-                </Button>
+                <Tooltip title="Создает командный план продаж на выбранный период.">
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    icon={<PlusOutlined />}
+                    loading={createTarget.isPending}
+                  >
+                    Поставить план команды
+                  </Button>
+                </Tooltip>
               </Form.Item>
             </Form>
           </Card>
@@ -904,14 +1029,16 @@ export const SalesPlanSection = ({
                 <RangePicker allowClear={false} />
               </Form.Item>
               <Form.Item>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  icon={<PlusOutlined />}
-                  loading={createTarget.isPending}
-                >
-                  Поставить план
-                </Button>
+                <Tooltip title="Создает личный план продаж выбранному менеджеру на выбранный период.">
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    icon={<PlusOutlined />}
+                    loading={createTarget.isPending}
+                  >
+                    Поставить план
+                  </Button>
+                </Tooltip>
               </Form.Item>
             </Form>
           </Card>
@@ -1114,7 +1241,7 @@ export const SalesPlanSection = ({
             <InputNumber min={1} style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item name="reward" label="Бонус, сом">
-            <InputNumber min={0} style={{ width: "100%" }} />
+            <InputNumber min={0} style={{ width: "100%" }} placeholder="Бонус, сом" />
           </Form.Item>
           <Form.Item
             name="period"
@@ -1153,7 +1280,7 @@ export const SalesPlanSection = ({
             <InputNumber min={1} style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item name="reward" label="Бонус команды, сом">
-            <InputNumber min={0} style={{ width: "100%" }} />
+            <InputNumber min={0} style={{ width: "100%" }} placeholder="Бонус команды, сом" />
           </Form.Item>
           <Form.Item
             name="period"

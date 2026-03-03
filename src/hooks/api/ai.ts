@@ -10,6 +10,8 @@ import type {
   AiMarketingPlanDraftResult,
   AiOrderDraftRequest,
   AiOrderDraftResult,
+  AiSalesPlanDraftRequest,
+  AiSalesPlanDraftResult,
   AiTasksDraftRequest,
   AiTasksDraftResult,
 } from "./types";
@@ -44,6 +46,17 @@ export const useAiMarketingPlanDraft = () =>
     },
     onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
       message.error(error.response?.data?.message || error.message || "Не удалось разобрать маркетинг-план через ИИ");
+    },
+  });
+
+export const useAiSalesPlanDraft = () =>
+  useMutation({
+    mutationFn: async (payload: AiSalesPlanDraftRequest) => {
+      const { data } = await api.post<AiSalesPlanDraftResult>("/ai/sales-plan-draft", payload);
+      return data;
+    },
+    onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
+      message.error(error.response?.data?.message || error.message || "Не удалось разобрать план продаж через ИИ");
     },
   });
 

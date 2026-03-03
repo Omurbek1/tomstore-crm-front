@@ -40,7 +40,14 @@ type Props = {
 type ManagerInfo = {
   id?: string;
   name?: string;
-  role?: "superadmin" | "admin" | "manager" | "storekeeper" | "cashier";
+  role?:
+    | "superadmin"
+    | "admin"
+    | "manager"
+    | "storekeeper"
+    | "cashier"
+    | "smm"
+    | "marketing";
   roles?: string[];
   salaryType?: "commission" | "fixed";
   branchName?: string;

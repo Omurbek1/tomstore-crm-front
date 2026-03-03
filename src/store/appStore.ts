@@ -2,7 +2,14 @@ import { create } from "zustand";
 
 type ThemeMode = "light" | "dark";
 type UiMode = "default" | "comfort";
-type Role = "superadmin" | "admin" | "manager" | "storekeeper" | "cashier";
+type Role =
+  | "superadmin"
+  | "admin"
+  | "manager"
+  | "storekeeper"
+  | "cashier"
+  | "smm"
+  | "marketing";
 
 type StoreUser = {
   id: string;

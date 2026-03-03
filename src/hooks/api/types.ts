@@ -1,4 +1,11 @@
-export type Role = "superadmin" | "admin" | "manager" | "storekeeper" | "cashier";
+export type Role =
+  | "superadmin"
+  | "admin"
+  | "manager"
+  | "storekeeper"
+  | "cashier"
+  | "smm"
+  | "marketing";
 export type ThemeMode = "light" | "dark";
 
 export interface BaseEntity {
@@ -45,6 +52,11 @@ export interface Manager extends BaseEntity {
   roles?: Role[];
   salaryType?: "commission" | "fixed";
   fixedMonthlySalary?: number;
+  workDayHoursDefault?: number;
+  workBreakMinutesDefault?: number;
+  workStartTimeDefault?: string;
+  lateGraceMinutesDefault?: number;
+  workWeekModeDefault?: "5/2" | "6/1";
   canManageProducts?: boolean;
   theme?: ThemeMode;
   deleted?: boolean;
@@ -136,6 +148,75 @@ export interface BonusTarget extends BaseEntity {
   rewardIssued?: boolean;
   rewardIssuedAt?: string | null;
   rewardApprovedBy?: string | null;
+}
+
+export interface WorkTimeEntry extends BaseEntity {
+  managerId: string;
+  managerName: string;
+  branchName?: string;
+  workDate: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  plannedStartAt?: string | null;
+  plannedEndAt?: string | null;
+  breakMinutes: number;
+  plannedHours: number;
+  workedHours: number;
+  overtimeHours: number;
+  undertimeHours: number;
+  lateMinutes: number;
+  earlyLeaveMinutes: number;
+  note?: string;
+}
+
+export interface PaginatedWorkTimeEntries {
+  items: WorkTimeEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface WorkTimeSummary {
+  standards: {
+    monthHours: number;
+  };
+  period: {
+    startDate?: string | null;
+    endDate?: string | null;
+  };
+  totals: {
+    entriesCount: number;
+    plannedHours: number;
+    workedHours: number;
+    overtimeHours: number;
+    undertimeHours: number;
+    lateMinutes: number;
+    earlyLeaveMinutes: number;
+    salaryPlannedByHours: number;
+    salaryAccruedByHours: number;
+    overtimePay: number;
+    undertimeDeduction: number;
+  };
+  byManager: Array<{
+    managerId: string;
+    managerName: string;
+    entriesCount: number;
+    plannedHours: number;
+    workedHours: number;
+    overtimeHours: number;
+    undertimeHours: number;
+    lateMinutes: number;
+    earlyLeaveMinutes: number;
+    avgWorkedHours: number;
+    salaryType: "commission" | "fixed";
+    fixedMonthlySalary: number;
+    hourlyRate: number;
+    salaryPlannedByHours: number;
+    salaryAccruedByHours: number;
+    overtimePay: number;
+    undertimeDeduction: number;
+  }>;
 }
 
 export interface Expense extends BaseEntity {
@@ -395,6 +476,119 @@ export interface MarketingKpiInsights {
   performerControl: MarketingKpiPerformerControl[];
 }
 
+export interface MarketingAutomationAccount {
+  id: string;
+  managerId: string;
+  managerName?: string;
+  platform: "instagram";
+  sourceMode: "instagram_graph" | "manual";
+  accountHandle: string;
+  accountId?: string;
+  accessToken?: string;
+  isActive: boolean;
+  autoMarkChecklist: boolean;
+  autoSyncKpi: boolean;
+  weeklyPostsTarget?: number;
+  weeklyReelsTarget?: number;
+  lastCheckedAt?: string | null;
+  lastError?: string | null;
+  weeklyTargets?: {
+    posts: number;
+    reels: number;
+  };
+  latestCheck?: {
+    checkDate: string;
+    postsCount: number;
+    reelsCount: number;
+    storiesCount: number;
+    followersCount: number;
+    followersDelta: number;
+    reachCount: number;
+    impressionsCount: number;
+    source: string;
+    checkedAt?: string | null;
+  } | null;
+  monthTotals?: {
+    posts: number;
+    reels: number;
+    stories: number;
+    daysChecked: number;
+    followersDelta: number;
+  };
+}
+
+export interface MarketingAutomationStatus {
+  month: string;
+  schedule: {
+    timezone: string;
+    hour: number;
+    minute: number;
+    runAt: string;
+  };
+  accounts: MarketingAutomationAccount[];
+  summary: {
+    activeAccounts: number;
+    totalAccounts: number;
+    totalPosts: number;
+    totalReels: number;
+    totalStories: number;
+    totalReach: number;
+    totalImpressions: number;
+    totalFollowersDelta: number;
+    latestFollowersTotal: number;
+  };
+}
+
+export interface MarketingAutomationSchedule {
+  timezone: string;
+  hour: number;
+  minute: number;
+  runAt: string;
+}
+
+export interface MarketingAutomationReport {
+  month: string;
+  period: "week" | "month";
+  fromDate: string;
+  toDate: string;
+  managerId?: string | null;
+  schedule: MarketingAutomationSchedule;
+  totals: {
+    checksCount: number;
+    posts: number;
+    reels: number;
+    stories: number;
+    reach: number;
+    impressions: number;
+    followersDelta: number;
+  };
+  daily: Array<{
+    date: string;
+    posts: number;
+    reels: number;
+    stories: number;
+    reach: number;
+    impressions: number;
+    followersDelta: number;
+    checksCount: number;
+  }>;
+  byAccount: Array<{
+    accountId: string;
+    managerId: string;
+    managerName?: string;
+    accountHandle: string;
+    checksCount: number;
+    posts: number;
+    reels: number;
+    stories: number;
+    reach: number;
+    impressions: number;
+    followersDelta: number;
+    latestFollowersCount: number;
+    latestCheckDate?: string;
+  }>;
+}
+
 export interface AiAnalyzeRequest {
   domain: "sales" | "marketing";
   locale?: string;
@@ -463,6 +657,26 @@ export interface AiMarketingPlanDraftResult {
       title?: string;
       done: boolean;
     }>;
+  };
+}
+
+export interface AiSalesPlanDraftRequest {
+  text: string;
+  locale?: string;
+  assignees?: Array<{ id: string; name: string; role?: string }>;
+}
+
+export interface AiSalesPlanDraftResult {
+  source: "llm";
+  draft: {
+    planType: "personal" | "team";
+    managerId?: string;
+    managerName?: string;
+    amount: number;
+    reward: number;
+    periodStart: string;
+    periodEnd: string;
+    note?: string;
   };
 }
 

@@ -22,6 +22,7 @@ import {
   ToolOutlined,
   UnorderedListOutlined,
   DotChartOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/ru";
@@ -200,6 +201,11 @@ const SalesPlanSection = lazy(() =>
     default: m.SalesPlanSection,
   })),
 );
+const WorkTimeSection = lazy(() =>
+  import("../features/work-time/ui/WorkTimeSection").then((m) => ({
+    default: m.WorkTimeSection,
+  })),
+);
 
 dayjs.locale("ru");
 
@@ -217,7 +223,14 @@ const sectionLoadingFallback = (
 
 // --- TYPES ---
 
-type Role = "superadmin" | "admin" | "manager" | "storekeeper" | "cashier";
+type Role =
+  | "superadmin"
+  | "admin"
+  | "manager"
+  | "storekeeper"
+  | "cashier"
+  | "smm"
+  | "marketing";
 type SaleType = "office" | "delivery";
 type PaymentType = "cash" | "installment" | "hybrid" | "booking" | "manual";
 type DeliveryStatusCode =
@@ -1580,6 +1593,17 @@ const AppContent = () => {
             ),
           },
           {
+            key: "17",
+            icon: <ClockCircleOutlined />,
+            label: (
+              <p
+                className={appTheme === "dark" ? "text-white" : "text-gray-800"}
+              >
+                Учет времени
+              </p>
+            ),
+          },
+          {
             key: "5",
             icon: <WalletOutlined />,
             label: (
@@ -2036,6 +2060,11 @@ const AppContent = () => {
                 formatBirthDate={formatBirthDate}
                 formatDate={formatDate}
               />
+            </Suspense>
+          )}
+          {activeTab === "17" && isAdmin && (
+            <Suspense fallback={sectionLoadingFallback}>
+              <WorkTimeSection managers={managers} formatDate={formatDate} />
             </Suspense>
           )}
           {activeTab === "5" && isAdmin && (

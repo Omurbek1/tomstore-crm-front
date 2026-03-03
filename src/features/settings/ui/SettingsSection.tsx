@@ -50,7 +50,14 @@ type SaleLike = {
 type UserLike = {
   id: string;
   name: string;
-  role: "superadmin" | "admin" | "manager" | "storekeeper" | "cashier";
+  role:
+    | "superadmin"
+    | "admin"
+    | "manager"
+    | "storekeeper"
+    | "cashier"
+    | "smm"
+    | "marketing";
 };
 
 type AppTheme = "light" | "dark";
@@ -299,8 +306,12 @@ export const SettingsSection = ({
                     ? "red"
                     : user.role === "storekeeper"
                       ? "purple"
-                      : user.role === "cashier"
-                        ? "gold"
+                    : user.role === "cashier"
+                      ? "gold"
+                      : user.role === "smm"
+                        ? "cyan"
+                        : user.role === "marketing"
+                          ? "geekblue"
                         : "blue"
               }
             >
@@ -312,6 +323,10 @@ export const SettingsSection = ({
                     ? "Складщик"
                     : user.role === "cashier"
                       ? "Кассир"
+                      : user.role === "smm"
+                        ? "SMM"
+                        : user.role === "marketing"
+                          ? "Маркетинг"
                       : "Менеджер"}
             </Tag>
           </div>

@@ -12,11 +12,11 @@ import {
   Radio,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Tooltip,
   Typography,
-  message,
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import type { ColumnsType } from "antd/es/table";
@@ -24,16 +24,12 @@ import {
   useCreateMarketingKpi,
   useAiAnalyze,
   useAiMarketingPlanDraft,
-  useAiTasksDraft,
-  useCreateTask,
   useMarketingKpi,
   useMarketingKpiInsights,
   useUpdateMarketingKpi,
-  type AiTasksDraftItem,
   type Manager,
   type MarketingKpi,
 } from "../../../hooks/api";
-import { useAppStore } from "../../../store/appStore";
 
 const { RangePicker } = DatePicker;
 
@@ -67,8 +63,6 @@ type KpiFormValues = {
   }>;
 };
 
-type AutoActionMode = "risk" | "growth" | "sprint";
-
 const PLAN_ITEM_TYPES = [
   { label: "Пост", value: "post" },
   { label: "Рилс", value: "reels" },
@@ -77,6 +71,7 @@ const PLAN_ITEM_TYPES = [
 ] as const;
 
 const hasMarketingRole = (manager: Manager) => {
+  const textIndex = `${manager.name || ""} ${manager.role || ""}`.toLowerCase();
   const tokens = new Set<string>([
     String(manager.role || "")
       .trim()
@@ -87,22 +82,25 @@ const hasMarketingRole = (manager: Manager) => {
         .toLowerCase(),
     ),
   ]);
-  return tokens.has("smm") || tokens.has("marketing");
+  return (
+    tokens.has("smm") ||
+    tokens.has("смм") ||
+    textIndex.includes("smm") ||
+    textIndex.includes("смм")
+  );
 };
 
 export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
-  const user = useAppStore((s) => s.user);
   const [month, setMonth] = useState(dayjs().format("YYYY-MM"));
   const [search, setSearch] = useState("");
   const [performerSource, setPerformerSource] = useState<"all" | "system" | "external">("all");
   const [showKpiGuide, setShowKpiGuide] = useState(false);
+  const [showKpiSalaryCard, setShowKpiSalaryCard] = useState(true);
+  const [showAiPlanImportCard, setShowAiPlanImportCard] = useState(true);
   const [showAlerts, setShowAlerts] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<MarketingKpi | null>(null);
   const [aiPlanText, setAiPlanText] = useState("");
-  const [aiRiskTasks, setAiRiskTasks] = useState<AiTasksDraftItem[]>([]);
-  const [aiRiskTasksTitle, setAiRiskTasksTitle] = useState("Задачи по рискам");
-  const [autoActionMode, setAutoActionMode] = useState<AutoActionMode>("risk");
   const [form] = Form.useForm<KpiFormValues>();
   const formValues = Form.useWatch([], form);
 
@@ -110,10 +108,8 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
   const insightsQuery = useMarketingKpiInsights({ month, q: search });
   const createKpi = useCreateMarketingKpi();
   const updateKpi = useUpdateMarketingKpi();
-  const createTask = useCreateTask();
   const aiAnalyze = useAiAnalyze();
   const aiMarketingPlanDraft = useAiMarketingPlanDraft();
-  const aiTasksDraft = useAiTasksDraft();
   const [aiReport, setAiReport] = useState<{
     source: "llm";
     summary: string;
@@ -229,9 +225,11 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
       text,
       month,
       locale: "ru",
-      assignees: managers
-        .filter(hasMarketingRole)
-        .map((m) => ({ id: m.id, name: m.name, role: m.role })),
+      assignees: marketingManagers.map((m) => ({
+        id: m.id,
+        name: m.name,
+        role: m.role,
+      })),
     });
 
     const draft = result.draft;
@@ -301,67 +299,12 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
     ];
     const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `marketing-report-${month}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `marketing-report-${month}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
   };
-
-  const describeAlertDecision = (alert: {
-    level: "critical" | "warning" | "success" | "info";
-  }) => {
-    if (alert.level === "critical") {
-      return "Решение: срочно запускать 7-дневный корректирующий план и ежедневный контроль выполнения.";
-    }
-    if (alert.level === "warning") {
-      return "Решение: добавить точечные задачи на неделю и зафиксировать ответственного по каждой.";
-    }
-    if (alert.level === "success") {
-      return "Решение: закрепить успешный подход как стандарт и масштабировать на команду.";
-    }
-    return "Решение: собрать данные по периоду и назначить базовые контрольные задачи.";
-  };
-
-  const alertLevelWeight = (level: "critical" | "warning" | "success" | "info") => {
-    if (level === "critical") return 0;
-    if (level === "warning") return 1;
-    if (level === "success") return 2;
-    return 3;
-  };
-
-  const sortedAlerts = useMemo(() => {
-    const list = insightsQuery.data?.alerts || [];
-    return [...list].sort((a, b) => alertLevelWeight(a.level) - alertLevelWeight(b.level));
-  }, [insightsQuery.data?.alerts]);
-
-  const groupedDraftTasks = useMemo(() => {
-    const groups: Record<"critical" | "warning" | "growth", AiTasksDraftItem[]> = {
-      critical: [],
-      warning: [],
-      growth: [],
-    };
-    aiRiskTasks.forEach((task) => {
-      const text = `${task.title || ""} ${task.description || ""}`.toLowerCase();
-      const hasGrowthMarker =
-        text.includes("рост") ||
-        text.includes("масштаб") ||
-        text.includes("тест") ||
-        text.includes("улучш");
-      const group =
-        autoActionMode === "growth"
-          ? "growth"
-          : autoActionMode === "sprint" && hasGrowthMarker
-            ? "growth"
-            : task.priority === "urgent" || task.priority === "high"
-              ? "critical"
-              : task.priority === "medium"
-                ? "warning"
-                : "growth";
-      groups[group].push(task);
-    });
-    return groups;
-  }, [aiRiskTasks, autoActionMode]);
 
   const kpiPreview = useMemo(() => {
     const v = (formValues || {}) as KpiFormValues;
@@ -421,293 +364,6 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
         : "Данные готовы к сохранению.",
     };
   }, [formValues]);
-
-  const generateRiskTasksViaAi = async () => {
-    const insights = insightsQuery.data;
-    if (!insights) {
-      message.info("Нет данных контроля для генерации задач.");
-      return;
-    }
-
-    const riskPerformers = insights.performerControl.filter((x) => x.status === "risk");
-    if (insights.alerts.length === 0 && riskPerformers.length === 0) {
-      message.info("Рисков не найдено. Задачи по рискам не требуются.");
-      return;
-    }
-
-    const text = [
-      `Сформируй управленческие задачи по рискам SMM/Marketing за ${insights.month}.`,
-      "Цель: чтобы команда закрыла KPI и контент-план.",
-      `Health score: ${insights.healthScore}`,
-      `Средний KPI: ${insights.totals.avgKpi}`,
-      `Средний ER: ${insights.totals.avgEr}`,
-      `Закрытие плана: ${(insights.totals.planCompletion * 100).toFixed(1)}%`,
-      `Закрытие чеклиста: ${(insights.totals.checklistCompletion * 100).toFixed(1)}%`,
-      "Алерты:",
-      ...insights.alerts.map((a) => `- [${a.level}] ${a.title}: ${a.description}`),
-      "Исполнители в риске:",
-      ...riskPerformers.map(
-        (r) =>
-          `- ${r.managerName}: KPI ${r.kpiScore.toFixed(1)}, ER ${r.erPercent.toFixed(
-            2,
-          )}%, план ${(r.planCompletion * 100).toFixed(1)}%, действие: ${r.nextAction}`,
-      ),
-      "Сделай задачи простыми и понятными для любого сотрудника: что сделать, кто ответственный, срок, приоритет.",
-    ].join("\n");
-
-    const result = await aiTasksDraft.mutateAsync({
-      text,
-      locale: "ru",
-      assignees: managers.map((m) => ({ id: m.id, name: m.name, role: m.role })),
-    });
-
-    const tasks = result.tasks || [];
-    setAiRiskTasksTitle("Задачи по рискам");
-    setAutoActionMode("risk");
-    setAiRiskTasks(tasks);
-    if (tasks.length === 0) {
-      message.info("ИИ не предложил задачи. Уточните данные периода.");
-    } else {
-      message.success(`ИИ подготовил задач по рискам: ${tasks.length}`);
-    }
-  };
-
-  const generateGrowthTasksViaAi = async () => {
-    const insights = insightsQuery.data;
-    if (!insights) {
-      message.info("Нет данных контроля для генерации задач роста.");
-      return;
-    }
-
-    const strongPerformers = insights.performerControl.filter((x) => x.status === "strong");
-    const successAlerts = insights.alerts.filter((x) => x.level === "success");
-    if (strongPerformers.length === 0 && successAlerts.length === 0) {
-      message.info("Явных точек роста не найдено. Добавьте больше KPI-данных.");
-      return;
-    }
-
-    const text = [
-      `Сформируй задачи по масштабированию роста SMM/Marketing за ${insights.month}.`,
-      "Цель: закрепить сильные практики и увеличить результат в следующем периоде.",
-      `Health score: ${insights.healthScore}`,
-      `Средний KPI: ${insights.totals.avgKpi}`,
-      `Средний ER: ${insights.totals.avgEr}`,
-      `Тренд KPI к прошлому месяцу: ${insights.trend.kpiDelta >= 0 ? "+" : ""}${insights.trend.kpiDelta}`,
-      "Позитивные сигналы:",
-      ...successAlerts.map((a) => `- ${a.title}: ${a.description}`),
-      "Сильные исполнители:",
-      ...strongPerformers.map(
-        (r) =>
-          `- ${r.managerName}: KPI ${r.kpiScore.toFixed(1)}, ER ${r.erPercent.toFixed(
-            2,
-          )}%, план ${(r.planCompletion * 100).toFixed(1)}%`,
-      ),
-      "Нужны практичные задачи: репликация лучших форматов, стандартизация, A/B тесты, контроль внедрения.",
-    ].join("\n");
-
-    const result = await aiTasksDraft.mutateAsync({
-      text,
-      locale: "ru",
-      assignees: managers.map((m) => ({ id: m.id, name: m.name, role: m.role })),
-    });
-    const tasks = result.tasks || [];
-    setAiRiskTasksTitle("Задачи по росту");
-    setAutoActionMode("growth");
-    setAiRiskTasks(tasks);
-    if (tasks.length === 0) {
-      message.info("ИИ не предложил задачи роста. Уточните данные периода.");
-    } else {
-      message.success(`ИИ подготовил задач по росту: ${tasks.length}`);
-    }
-  };
-
-  const generateWeeklySprintPlanViaAi = async () => {
-    const insights = insightsQuery.data;
-    if (!insights) {
-      message.info("Нет данных контроля для генерации недельного плана.");
-      return;
-    }
-
-    const sprintStart = dayjs().format("YYYY-MM-DD");
-    const sprintEnd = dayjs().add(6, "day").format("YYYY-MM-DD");
-    const text = [
-      `Собери управленческий sprint-план на 7 дней (${sprintStart}..${sprintEnd}) для SMM/Marketing.`,
-      "План должен быть понятным любому сотруднику: что сделать, зачем, кто отвечает, срок, приоритет.",
-      "Нужен баланс: исправление рисков + масштабирование роста.",
-      `Health score: ${insights.healthScore}`,
-      `Средний KPI: ${insights.totals.avgKpi}`,
-      `Средний ER: ${insights.totals.avgEr}`,
-      `Закрытие плана: ${(insights.totals.planCompletion * 100).toFixed(1)}%`,
-      `Закрытие чеклиста: ${(insights.totals.checklistCompletion * 100).toFixed(1)}%`,
-      "Алерты:",
-      ...insights.alerts.map((a) => `- [${a.level}] ${a.title}: ${a.description}`),
-      "Контроль по исполнителям:",
-      ...insights.performerControl.map(
-        (r) =>
-          `- ${r.managerName}: статус=${r.status}, KPI ${r.kpiScore.toFixed(
-            1,
-          )}, план ${(r.planCompletion * 100).toFixed(1)}%, действие=${r.nextAction}`,
-      ),
-      "Сделай до 12 задач: ежедневные контрольные точки, контент-план, проверка ER, ретро и корректировки.",
-    ].join("\n");
-
-    const result = await aiTasksDraft.mutateAsync({
-      text,
-      locale: "ru",
-      assignees: managers.map((m) => ({ id: m.id, name: m.name, role: m.role })),
-    });
-    const tasks = result.tasks || [];
-    setAiRiskTasksTitle("Sprint-план 7 дней");
-    setAutoActionMode("sprint");
-    setAiRiskTasks(tasks);
-    if (tasks.length === 0) {
-      message.info("ИИ не собрал недельный план. Уточните данные периода.");
-    } else {
-      message.success(`ИИ подготовил задач для 7-дневного плана: ${tasks.length}`);
-    }
-  };
-
-  const createTaskFromRiskDraft = async (item: AiTasksDraftItem) => {
-    await createTask.mutateAsync({
-      title: String(item.title || "").trim(),
-      description: String(item.description || "").trim() || undefined,
-      assigneeId: String(item.assigneeId || "").trim() || undefined,
-      assigneeName:
-        !String(item.assigneeId || "").trim() && String(item.assigneeName || "").trim()
-          ? String(item.assigneeName || "").trim()
-          : undefined,
-      assigneeRole:
-        !String(item.assigneeId || "").trim() && String(item.assigneeRole || "").trim()
-          ? String(item.assigneeRole || "").trim()
-          : undefined,
-      priority: item.priority || "medium",
-      deadline: item.deadline
-        ? dayjs(String(item.deadline), "YYYY-MM-DD").isValid()
-          ? dayjs(String(item.deadline), "YYYY-MM-DD").endOf("day").toISOString()
-          : undefined
-        : undefined,
-      createdById: user?.id || "system-ai",
-      createdByName: user?.name || "AI assistant",
-      attachmentUrls: [],
-    });
-  };
-
-  const createAllRiskTasks = async () => {
-    if (!aiRiskTasks.length) {
-      message.info("Сначала сгенерируйте задачи по рискам.");
-      return;
-    }
-    for (const item of aiRiskTasks) {
-      // Sequential create keeps task order predictable for the team.
-      await createTaskFromRiskDraft(item);
-    }
-    setAiRiskTasks([]);
-    message.success("Задачи по рискам созданы.");
-  };
-
-  const createLeaderTemplateTasks = async (mode: "urgent_fix" | "stabilize" | "scale") => {
-    const lead = marketingManagers[0];
-    const assigneeId = lead?.id;
-    const assigneeName = lead?.name || "Команда маркетинга";
-    const assigneeRole = lead?.role || "marketing";
-    const today = dayjs();
-
-    const templates =
-      mode === "urgent_fix"
-        ? [
-            {
-              title: "Антикризисный 7-дневный контент-план",
-              description:
-                "Сформировать ежедневный план публикаций с дедлайнами и ответственными по каждому слоту.",
-              priority: "urgent" as const,
-              deadline: today.add(1, "day"),
-            },
-            {
-              title: "Ежедневный контроль KPI и чеклиста",
-              description:
-                "В конце дня фиксировать: выполненные пункты, причины срыва, корректировки на завтра.",
-              priority: "high" as const,
-              deadline: today.add(2, "day"),
-            },
-            {
-              title: "План восстановления ER",
-              description:
-                "Подготовить 3 теста форматов/CTA и согласовать запуск на ближайшие 3 дня.",
-              priority: "high" as const,
-              deadline: today.add(2, "day"),
-            },
-          ]
-        : mode === "stabilize"
-          ? [
-              {
-                title: "Стандарт качества контента на неделю",
-                description:
-                  "Утвердить единый чеклист перед публикацией: оффер, хук, CTA, формат, время публикации.",
-                priority: "medium" as const,
-                deadline: today.add(3, "day"),
-              },
-              {
-                title: "Недельный ритм отчетности",
-                description:
-                  "Назначить фиксированные точки контроля: понедельник план, среда статус, пятница итог.",
-                priority: "medium" as const,
-                deadline: today.add(3, "day"),
-              },
-              {
-                title: "Корректировка ролей и ответственности",
-                description:
-                  "Зафиксировать кто отвечает за посты, рилс, сторис и аналитику, чтобы не было разрывов.",
-                priority: "medium" as const,
-                deadline: today.add(4, "day"),
-              },
-            ]
-          : [
-              {
-                title: "Масштабирование лучшего контент-формата",
-                description:
-                  "Выделить 2-3 лучших связки и запланировать их тиражирование на следующий период.",
-                priority: "high" as const,
-                deadline: today.add(3, "day"),
-              },
-              {
-                title: "A/B тесты для роста охвата и ER",
-                description:
-                  "Запустить серию тестов по хукам, обложкам и CTA с фиксацией гипотез и результатов.",
-                priority: "medium" as const,
-                deadline: today.add(5, "day"),
-              },
-              {
-                title: "Плейбук роста для команды",
-                description:
-                  "Собрать краткий playbook: что сработало, почему, как повторять без потери качества.",
-                priority: "medium" as const,
-                deadline: today.add(6, "day"),
-              },
-            ];
-
-    for (const item of templates) {
-      await createTask.mutateAsync({
-        title: item.title,
-        description: item.description,
-        assigneeId,
-        assigneeName: assigneeId ? undefined : assigneeName,
-        assigneeRole: assigneeId ? undefined : assigneeRole,
-        priority: item.priority,
-        deadline: item.deadline.endOf("day").toISOString(),
-        createdById: user?.id || "leader-template",
-        createdByName: user?.name || "Руководитель",
-        attachmentUrls: [],
-      });
-    }
-
-    message.success(
-      mode === "urgent_fix"
-        ? "Шаблон «Срочно исправить» добавлен в задачи."
-        : mode === "stabilize"
-          ? "Шаблон «Стабилизировать» добавлен в задачи."
-          : "Шаблон «Масштабировать» добавлен в задачи.",
-    );
-  };
 
   const columns: ColumnsType<MarketingKpi> = [
     { title: "Сотрудник", dataIndex: "managerName", width: 180 },
@@ -864,329 +520,110 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
             ]}
           />
         </div>
-        <Card
-          size="small"
-          className="mb-3"
-          title="Как считается KPI и зарплата (SMM/Marketing)"
-          extra={
-            <Button type="link" onClick={() => setShowKpiGuide((v) => !v)}>
-              {showKpiGuide ? "Скрыть" : "Раскрыть"}
-            </Button>
-          }
-        >
-          {showKpiGuide ? (
-            <div className="text-sm space-y-2">
-              <div>
-                Формула KPI: <b>KPI = План × 50% + ER × 30% + Рост × 20%</b>
-              </div>
-              <div className="text-slate-500 dark:text-slate-300">
-                План учитывает и факт публикаций, и чеклист по датам. ER = вовлечения / охват × 100.
-              </div>
-              <div>
-                Корректировка зарплаты:
-                <ul className="list-disc pl-5 mt-1 space-y-1">
-                  <li>{`KPI >= 110: +20%`}</li>
-                  <li>{`95..109.99: +10%`}</li>
-                  <li>{`80..94.99: +3%`}</li>
-                  <li>{`70..79.99: -5%`}</li>
-                  <li>{`60..69.99: -10%`}</li>
-                  <li>{`< 60: -20%`}</li>
-                </ul>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <div className="rounded border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 p-2">
-                  <b>Пример 1 (хорошо):</b> база 30 000 c, KPI 102 → +10% = +3 000 c, итог 33 000 c.
-                </div>
-                <div className="rounded border border-rose-200 bg-rose-50 dark:bg-rose-900/20 dark:border-rose-800 p-2">
-                  <b>Пример 2 (слабо):</b> база 30 000 c, KPI 65 → -10% = -3 000 c, итог 27 000 c.
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </Card>
-
-        <Card
-          size="small"
-          className="mb-3"
-          loading={insightsQuery.isLoading}
-          title="Центр контроля SMM / Marketing"
-        >
-          {insightsQuery.data ? (
-            <Space direction="vertical" style={{ width: "100%" }} size={10}>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
-                  <Typography.Text type="secondary">Health score</Typography.Text>
-                  <div className="text-xl font-semibold">
-                    {Number(insightsQuery.data.healthScore || 0).toFixed(1)}
-                  </div>
-                </div>
-                <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
-                  <Typography.Text type="secondary">Закрытие плана</Typography.Text>
-                  <div className="text-xl font-semibold">
-                    {(Number(insightsQuery.data.totals.planCompletion || 0) * 100).toFixed(1)}%
-                  </div>
-                </div>
-                <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
-                  <Typography.Text type="secondary">Закрытие чеклиста</Typography.Text>
-                  <div className="text-xl font-semibold">
-                    {(Number(insightsQuery.data.totals.checklistCompletion || 0) * 100).toFixed(1)}%
-                  </div>
-                </div>
-                <div className="rounded border border-slate-200 dark:border-slate-700 p-2">
-                  <Typography.Text type="secondary">Тренд KPI к {insightsQuery.data.prevMonth}</Typography.Text>
-                  <div
-                    className={`text-xl font-semibold ${
-                      Number(insightsQuery.data.trend.kpiDelta || 0) >= 0
-                        ? "text-green-600"
-                        : "text-red-500"
-                    }`}
-                  >
-                    {Number(insightsQuery.data.trend.kpiDelta || 0) >= 0 ? "+" : ""}
-                    {Number(insightsQuery.data.trend.kpiDelta || 0).toFixed(2)}
-                  </div>
-                </div>
-              </div>
-
-              {showAlerts && sortedAlerts.length > 0 ? (
-                <Space direction="vertical" style={{ width: "100%" }} size={8}>
-                  <Typography.Text strong>Приоритет решений: critical → warning → рост</Typography.Text>
-                  {sortedAlerts.map((alert) => (
-                    <Alert
-                      key={alert.id}
-                      showIcon
-                      type={
-                        alert.level === "critical"
-                          ? "error"
-                          : alert.level === "warning"
-                            ? "warning"
-                            : alert.level === "success"
-                              ? "success"
-                              : "info"
-                      }
-                      message={`${alert.level.toUpperCase()} · ${alert.title}`}
-                      description={
-                        <div className="space-y-1">
-                          <div>{alert.description}</div>
-                          <div className="text-xs">{describeAlertDecision(alert)}</div>
-                        </div>
-                      }
-                    />
-                  ))}
-                </Space>
-              ) : null}
-
-              <Card
-                size="small"
-                type="inner"
-                title="Режим руководителя"
-                extra={
-                  <Tooltip title="Готовые шаблоны создают задачи сразу в модуле Tasks, без ручной настройки полей.">
-                    <Typography.Text type="secondary">Как это работает?</Typography.Text>
-                  </Tooltip>
-                }
-              >
-                <Space wrap>
-                  <Tooltip title="Когда есть просадка KPI/ER и нужен быстрый антикризисный запуск.">
-                    <Button
-                      danger
-                      onClick={() => createLeaderTemplateTasks("urgent_fix")}
-                      loading={createTask.isPending}
-                    >
-                      Срочно исправить
-                    </Button>
-                  </Tooltip>
-                  <Tooltip title="Когда нужно выровнять процесс, дедлайны и командную дисциплину.">
-                    <Button onClick={() => createLeaderTemplateTasks("stabilize")} loading={createTask.isPending}>
-                      Стабилизировать
-                    </Button>
-                  </Tooltip>
-                  <Tooltip title="Когда показатели хорошие и цель - ускорить рост за счет лучших практик.">
-                    <Button type="primary" onClick={() => createLeaderTemplateTasks("scale")} loading={createTask.isPending}>
-                      Масштабировать
-                    </Button>
-                  </Tooltip>
-                </Space>
-              </Card>
-
-              <Card
-                size="small"
-                type="inner"
-                title={`Автодействия: ${aiRiskTasksTitle}`}
-                extra={
-                  <Space>
-                    <Tooltip title="AI подготовит задачи для устранения рисков по критичным и warning-алертам.">
-                      <Button onClick={generateRiskTasksViaAi} loading={aiTasksDraft.isPending}>
-                        Создать задачи по рискам (AI)
-                      </Button>
-                    </Tooltip>
-                    <Tooltip title="AI подготовит задачи по масштабированию сильных практик и росту метрик.">
-                      <Button onClick={generateGrowthTasksViaAi} loading={aiTasksDraft.isPending}>
-                        Задачи по росту (AI)
-                      </Button>
-                    </Tooltip>
-                    <Tooltip title="AI соберет готовый управленческий план на ближайшие 7 дней.">
-                      <Button onClick={generateWeeklySprintPlanViaAi} loading={aiTasksDraft.isPending}>
-                        План 7 дней (AI)
-                      </Button>
-                    </Tooltip>
-                    <Button
-                      onClick={() => {
-                        setAiRiskTasks([]);
-                        setAiRiskTasksTitle("Задачи по рискам");
-                        setAutoActionMode("risk");
-                      }}
-                      disabled={!aiRiskTasks.length}
-                    >
-                      Очистить
-                    </Button>
-                    <Button
-                      type="primary"
-                      onClick={createAllRiskTasks}
-                      loading={createTask.isPending}
-                      disabled={!aiRiskTasks.length}
-                    >
-                      Создать все задачи
-                    </Button>
-                  </Space>
-                }
-              >
-                {aiRiskTasks.length === 0 ? (
-                  <Typography.Text type="secondary">
-                    Нажмите «Создать задачи по рискам (AI)», чтобы сразу получить понятный план действий для команды.
-                  </Typography.Text>
-                ) : (
-                  <Space direction="vertical" style={{ width: "100%" }} size={10}>
-                    {(["critical", "warning", "growth"] as const).map((group) => {
-                      const items = groupedDraftTasks[group];
-                      if (!items.length) return null;
-                      return (
-                        <Card
-                          key={group}
-                          size="small"
-                          type="inner"
-                          title={
-                            group === "critical"
-                              ? `Critical (${items.length})`
-                              : group === "warning"
-                                ? `Warning (${items.length})`
-                                : `Рост (${items.length})`
-                          }
-                        >
-                          <div className="space-y-2">
-                            {items.map((item, idx) => (
-                              <Alert
-                                key={`${group}-${item.title}-${idx}`}
-                                type={
-                                  group === "critical"
-                                    ? "error"
-                                    : group === "warning"
-                                      ? "warning"
-                                      : "success"
-                                }
-                                showIcon
-                                message={`${idx + 1}. ${item.title}`}
-                                description={
-                                  <div className="space-y-1">
-                                    <div>{item.description || "Без описания"}</div>
-                                    <div className="flex flex-wrap gap-2 items-center">
-                                      <Tag>{item.assigneeName || "Без исполнителя"}</Tag>
-                                      <Tag>{item.deadline || "Без дедлайна"}</Tag>
-                                      <Tag>{item.priority || "medium"}</Tag>
-                                      <Button
-                                        size="small"
-                                        type="link"
-                                        onClick={() => createTaskFromRiskDraft(item)}
-                                        loading={createTask.isPending}
-                                      >
-                                        Создать задачу
-                                      </Button>
-                                    </div>
-                                  </div>
-                                }
-                              />
-                            ))}
-                          </div>
-                        </Card>
-                      );
-                    })}
-                  </Space>
-                )}
-              </Card>
-
-              <Card size="small" type="inner" title="Контроль по исполнителям">
-                <div className="space-y-2">
-                  {insightsQuery.data.performerControl.slice(0, 8).map((row) => (
-                    <div
-                      key={`${row.managerId}-${row.managerName}`}
-                      className="rounded border border-slate-200 dark:border-slate-700 p-2"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="font-medium">{row.managerName}</div>
-                        <Tag
-                          color={
-                            row.status === "risk"
-                              ? "red"
-                              : row.status === "strong"
-                                ? "green"
-                                : "blue"
-                          }
-                        >
-                          {row.status === "risk"
-                            ? "Риск"
-                            : row.status === "strong"
-                              ? "Сильный"
-                              : "Стабильно"}
-                        </Tag>
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-300 mt-1">
-                        KPI {row.kpiScore.toFixed(1)} · ER {row.erPercent.toFixed(2)}% · План{" "}
-                        {(row.planCompletion * 100).toFixed(1)}% · Чеклист{" "}
-                        {(row.checklistCompletion * 100).toFixed(1)}%
-                      </div>
-                      <div className="text-xs mt-1">{row.nextAction}</div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            </Space>
-          ) : (
-            <Typography.Text type="secondary">
-              Нет данных центра контроля за выбранный период.
-            </Typography.Text>
-          )}
-        </Card>
-
-        <Card
-          size="small"
-          className="mb-3"
-          title="ИИ: загрузить контент-план из текста"
-          extra={
-            <Space>
-              <Button
-                onClick={applyAiDraftToForm}
-                loading={aiMarketingPlanDraft.isPending}
-              >
-                Разобрать и заполнить
-              </Button>
-              <Button
-                onClick={() => setAiPlanText("")}
-                disabled={!aiPlanText}
-              >
-                Очистить
-              </Button>
-            </Space>
-          }
-        >
-          <Input.TextArea
-            rows={4}
-            value={aiPlanText}
-            onChange={(e) => setAiPlanText(e.target.value)}
-            placeholder="Вставьте план SMM/маркетинга текстом: какие посты/рилс, даты, исполнитель, цель, бюджет..."
+        <Space wrap size={16} className="mb-3">
+          <div className="flex items-center gap-2">
+            <Tooltip title="Блок с формулой KPI и правилами расчета зарплаты/корректировки.">
+              <Typography.Text type="secondary">Показывать KPI/зарплата</Typography.Text>
+            </Tooltip>
+            <Switch size="small" checked={showKpiSalaryCard} onChange={setShowKpiSalaryCard} />
+          </div>
+          <div className="flex items-center gap-2">
+            <Tooltip title="Блок для разбора текстового контент-плана и автозаполнения формы KPI.">
+              <Typography.Text type="secondary">Показывать ИИ-загрузку плана</Typography.Text>
+            </Tooltip>
+            <Switch size="small" checked={showAiPlanImportCard} onChange={setShowAiPlanImportCard} />
+          </div>
+        </Space>
+        {marketingManagers.length === 0 ? (
+          <Alert
+            className="mb-3"
+            type="warning"
+            showIcon
+            message="Нет сотрудников с ролью SMM"
+            description="Добавьте сотруднику роль/метку SMM (или СММ), чтобы включить автоконтроль."
           />
-          <Typography.Text type="secondary" className="block mt-2">
-            ИИ создаст черновик KPI и контент-плана. Вы проверяете и сохраняете в систему.
-          </Typography.Text>
-        </Card>
+        ) : null}
+
+        {showKpiSalaryCard ? (
+          <Card
+            size="small"
+            className="mb-3"
+            title="Как считается KPI и зарплата (SMM/Marketing)"
+            extra={
+              <Button type="link" onClick={() => setShowKpiGuide((v) => !v)}>
+                {showKpiGuide ? "Скрыть" : "Раскрыть"}
+              </Button>
+            }
+          >
+            {showKpiGuide ? (
+              <div className="text-sm space-y-2">
+                <div>
+                  Формула KPI: <b>KPI = План × 50% + ER × 30% + Рост × 20%</b>
+                </div>
+                <div className="text-slate-500 dark:text-slate-300">
+                  План учитывает и факт публикаций, и чеклист по датам. ER = вовлечения / охват × 100.
+                </div>
+                <div>
+                  Корректировка зарплаты:
+                  <ul className="list-disc pl-5 mt-1 space-y-1">
+                    <li>{`KPI >= 110: +20%`}</li>
+                    <li>{`95..109.99: +10%`}</li>
+                    <li>{`80..94.99: +3%`}</li>
+                    <li>{`70..79.99: -5%`}</li>
+                    <li>{`60..69.99: -10%`}</li>
+                    <li>{`< 60: -20%`}</li>
+                  </ul>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <div className="rounded border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 p-2">
+                    <b>Пример 1 (хорошо):</b> база 30 000 c, KPI 102 → +10% = +3 000 c, итог 33 000 c.
+                  </div>
+                  <div className="rounded border border-rose-200 bg-rose-50 dark:bg-rose-900/20 dark:border-rose-800 p-2">
+                    <b>Пример 2 (слабо):</b> база 30 000 c, KPI 65 → -10% = -3 000 c, итог 27 000 c.
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {showAiPlanImportCard ? (
+          <Card
+            size="small"
+            className="mb-3"
+            title="ИИ: загрузить контент-план из текста"
+            extra={
+              <Space>
+                <Tooltip title="Из текста создается черновик KPI и контент-план, поля формы заполняются автоматически.">
+                  <Button
+                    onClick={applyAiDraftToForm}
+                    loading={aiMarketingPlanDraft.isPending}
+                  >
+                    Разобрать и заполнить
+                  </Button>
+                </Tooltip>
+                <Tooltip title="Очищает текст для нового ввода, данные в сохраненных KPI не затрагивает.">
+                  <Button
+                    onClick={() => setAiPlanText("")}
+                    disabled={!aiPlanText}
+                  >
+                    Очистить
+                  </Button>
+                </Tooltip>
+              </Space>
+            }
+          >
+            <Input.TextArea
+              rows={4}
+              value={aiPlanText}
+              onChange={(e) => setAiPlanText(e.target.value)}
+              placeholder="Вставьте план SMM/маркетинга текстом: какие посты/рилс, даты, исполнитель, цель, бюджет..."
+            />
+            <Typography.Text type="secondary" className="block mt-2">
+              ИИ создаст черновик KPI и контент-плана. Вы проверяете и сохраняете в систему.
+            </Typography.Text>
+          </Card>
+        ) : null}
 
         <Card
           size="small"
@@ -1194,15 +631,21 @@ export const MarketingKpiSection = ({ managers, formatDate }: Props) => {
           title="AI-анализ SMM/Маркетинг"
           extra={
             <Space>
-              <Button size="small" onClick={() => setShowAlerts((v) => !v)}>
-                {showAlerts ? "Скрыть alerts" : "Показать alerts"}
-              </Button>
-              <Button size="small" onClick={runAiAnalysis} loading={aiAnalyze.isPending}>
-                Проверить ИИ
-              </Button>
-              <Button size="small" onClick={() => setAiReport(null)} disabled={!aiReport}>
-                Очистить
-              </Button>
+              <Tooltip title="Показывает или скрывает предупреждения и сигналы по текущему периоду.">
+                <Button size="small" onClick={() => setShowAlerts((v) => !v)}>
+                  {showAlerts ? "Скрыть alerts" : "Показать alerts"}
+                </Button>
+              </Tooltip>
+              <Tooltip title="Запускает AI-анализ по KPI, ER, трендам и формирует управленческие рекомендации.">
+                <Button size="small" onClick={runAiAnalysis} loading={aiAnalyze.isPending}>
+                  Проверить ИИ
+                </Button>
+              </Tooltip>
+              <Tooltip title="Очищает только текущий AI-отчет на экране.">
+                <Button size="small" onClick={() => setAiReport(null)} disabled={!aiReport}>
+                  Очистить
+                </Button>
+              </Tooltip>
             </Space>
           }
         >

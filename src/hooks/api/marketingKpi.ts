@@ -2,7 +2,14 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { useMemo } from "react";
 import { message } from "antd";
 import { api } from "../../api/httpClient";
-import type { MarketingKpi, MarketingKpiInsights, PaginatedMarketingKpi } from "./types";
+import type {
+  MarketingAutomationReport,
+  MarketingAutomationSchedule,
+  MarketingAutomationStatus,
+  MarketingKpi,
+  MarketingKpiInsights,
+  PaginatedMarketingKpi,
+} from "./types";
 
 export const useMarketingKpi = (params?: {
   month?: string;
@@ -107,3 +114,123 @@ export const useUpdateMarketingKpi = () => {
     },
   });
 };
+
+export const useMarketingAutomationStatus = (month?: string) =>
+  useQuery({
+    queryKey: ["marketing-kpi-automation-status", month || ""],
+    queryFn: async (): Promise<MarketingAutomationStatus> => {
+      const { data } = await api.get<MarketingAutomationStatus>("/marketing-kpi/automation/status", {
+        params: { month: month || undefined },
+      });
+      return data;
+    },
+    placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
+
+export const useSaveMarketingAutomationAccounts = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      payload: Array<{
+        id?: string;
+        managerId: string;
+        managerName?: string;
+        platform?: "instagram";
+        accountHandle: string;
+        isActive?: boolean;
+        autoMarkChecklist?: boolean;
+        autoSyncKpi?: boolean;
+        weeklyPostsTarget?: number;
+        weeklyReelsTarget?: number;
+      }>,
+    ) => {
+      const { data } = await api.put("/marketing-kpi/automation/accounts", payload);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing-kpi-automation-status"] });
+      message.success("Настройки автопроверки сохранены");
+    },
+    onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
+      message.error(error.response?.data?.message || error.message || "Не удалось сохранить настройки автопроверки");
+    },
+  });
+};
+
+export const useRunMarketingAutomationDaily = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload?: { force?: boolean; date?: string }) => {
+      const { data } = await api.post("/marketing-kpi/automation/run-daily", payload || {});
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing-kpi-automation-status"] });
+      queryClient.invalidateQueries({ queryKey: ["marketing-kpi"] });
+      message.success("Ежедневная автопроверка выполнена");
+    },
+    onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
+      message.error(error.response?.data?.message || error.message || "Не удалось запустить автопроверку");
+    },
+  });
+};
+
+export const useMarketingAutomationSchedule = () =>
+  useQuery({
+    queryKey: ["marketing-kpi-automation-schedule"],
+    queryFn: async (): Promise<MarketingAutomationSchedule> => {
+      const { data } = await api.get<MarketingAutomationSchedule>("/marketing-kpi/automation/schedule");
+      return data;
+    },
+    placeholderData: keepPreviousData,
+  });
+
+export const useUpdateMarketingAutomationSchedule = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { timezone?: string; hour?: number; minute?: number }) => {
+      const { data } = await api.patch<MarketingAutomationSchedule>("/marketing-kpi/automation/schedule", payload);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["marketing-kpi-automation-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["marketing-kpi-automation-status"] });
+      message.success("Расписание автопроверки обновлено");
+    },
+    onError: (error: { response?: { data?: { message?: string } }; message?: string }) => {
+      message.error(error.response?.data?.message || error.message || "Не удалось обновить расписание автопроверки");
+    },
+  });
+};
+
+export const useMarketingAutomationReport = (params?: {
+  month?: string;
+  managerId?: string;
+  period?: "week" | "month";
+  date?: string;
+}) =>
+  useQuery({
+    queryKey: [
+      "marketing-kpi-automation-report",
+      params?.month || "",
+      params?.managerId || "",
+      params?.period || "month",
+      params?.date || "",
+    ],
+    queryFn: async (): Promise<MarketingAutomationReport> => {
+      const { data } = await api.get<MarketingAutomationReport>("/marketing-kpi/automation/report", {
+        params: {
+          month: params?.month || undefined,
+          managerId: params?.managerId || undefined,
+          period: params?.period || undefined,
+          date: params?.date || undefined,
+        },
+      });
+      return data;
+    },
+    placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
